@@ -1,4 +1,6 @@
 import json
+import os
+import shlex
 import shutil
 import subprocess
 import tarfile
@@ -64,6 +66,8 @@ def run_pulsar2_job(
     images_num: int,
     fast: bool = False,
 ) -> None:
+    host_uid = os.getuid()
+    host_gid = os.getgid()
     cmd = [
         "docker",
         "run",
@@ -76,8 +80,10 @@ def run_pulsar2_job(
     fast_arg = " --fast" if fast else ""
     stdin_text = (
         "cd /data\n"
-        f"python convert_inside_docker.py --model-name {model_name} --images-num {images_num}{fast_arg}\n"
-        "exit\n"
+        f"python convert_inside_docker.py --model-name {shlex.quote(model_name)} --images-num {images_num}{fast_arg}\n"
+        "status=$?\n"
+        f"chown -R {host_uid}:{host_gid} /data || true\n"
+        "exit $status\n"
     )
     run_and_log(cmd, job_dir / "convert.log", stdin_text=stdin_text)
 

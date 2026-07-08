@@ -1,5 +1,6 @@
 import asyncio
 import json
+import os
 import re
 import subprocess
 import sys
@@ -142,7 +143,7 @@ def delete_job(job_id: str):
     job = read_job_json(job_dir)
     if job.get("status") in {"queued", "running"}:
         raise HTTPException(status_code=409, detail="cannot delete a queued or running job")
-    rmtree(job_dir)
+    remove_job_dir(job_dir, docker_image=job.get("docker_image", "pulsar2:6.0"))
     return {"deleted": True, "job_id": job_id}
 
 
@@ -243,6 +244,53 @@ def run_conversion(
 def save_upload(upload: UploadFile, path: Path) -> None:
     with path.open("wb") as f:
         copyfileobj(upload.file, f)
+
+
+def remove_job_dir(job_dir: Path, docker_image: str) -> None:
+    try:
+        rmtree(job_dir)
+        return
+    except PermissionError:
+        repair_job_owner_with_docker(job_dir, docker_image=docker_image)
+
+    try:
+        rmtree(job_dir)
+    except PermissionError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"failed to delete job because some files are not writable: {exc}",
+        ) from exc
+
+
+def repair_job_owner_with_docker(job_dir: Path, docker_image: str) -> None:
+    uid = os.getuid()
+    gid = os.getgid()
+    cmd = [
+        "docker",
+        "run",
+        "--rm",
+        "-v",
+        f"{job_dir.resolve()}:/data",
+        "--entrypoint",
+        "/bin/chown",
+        docker_image,
+        "-R",
+        f"{uid}:{gid}",
+        "/data",
+    ]
+    result = subprocess.run(
+        cmd,
+        cwd=BASE_DIR,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise HTTPException(
+            status_code=500,
+            detail="failed to repair Docker-generated file permissions before delete:\n" + result.stdout,
+        )
 
 
 def read_job_summary(job_dir: Path) -> dict:
