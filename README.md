@@ -118,6 +118,12 @@ uvicorn web.app:app --host 0.0.0.0 --port 8000
 http://127.0.0.1:8000/
 ```
 
+页面支持模型上传、数据集上传、上传进度、实时日志、任务状态和结果 zip 下载。日志使用 WebSocket 增量推送：
+
+```text
+WS /api/jobs/{job_id}/stream
+```
+
 健康检查：
 
 ```bash

@@ -26,15 +26,23 @@
         </div>
 
         <form id="jobForm" class="job-form">
-          <label class="field">
+          <div class="field">
             <span>模型文件</span>
-            <input id="modelFile" name="model" type="file" accept=".pt,.onnx" required />
-          </label>
+            <label class="file-control" for="modelFile">
+              <strong>选择模型</strong>
+              <em id="modelFileName">支持 .pt / .onnx</em>
+            </label>
+            <input id="modelFile" class="native-file" name="model" type="file" accept=".pt,.onnx" required />
+          </div>
 
-          <label class="field">
+          <div class="field">
             <span>量化数据集</span>
-            <input id="datasetFile" name="dataset" type="file" accept=".zip" required />
-          </label>
+            <label class="file-control" for="datasetFile">
+              <strong>选择数据集</strong>
+              <em id="datasetFileName">上传 .zip 文件</em>
+            </label>
+            <input id="datasetFile" class="native-file" name="dataset" type="file" accept=".zip" required />
+          </div>
 
           <label class="field">
             <span>模型名称</span>
@@ -64,6 +72,10 @@
           </div>
 
           <button id="submitButton" class="primary-button" type="submit">开始转换</button>
+          <div class="upload-progress" id="uploadProgress">
+            <div class="upload-progress-bar" id="uploadProgressBar"></div>
+          </div>
+          <div class="upload-progress-text" id="uploadProgressText">等待上传</div>
         </form>
       </section>
 

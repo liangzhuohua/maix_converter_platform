@@ -1,3 +1,4 @@
+import asyncio
 import json
 import re
 import subprocess
@@ -7,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from shutil import copyfileobj
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -133,6 +134,55 @@ def download_job(job_id: str):
     if not zip_path.is_file():
         raise HTTPException(status_code=404, detail="result zip is not ready")
     return FileResponse(zip_path, filename=zip_path.name)
+
+
+@app.websocket("/api/jobs/{job_id}/stream")
+async def stream_job(websocket: WebSocket, job_id: str):
+    await websocket.accept()
+    try:
+        job_dir = get_job_dir(job_id)
+    except HTTPException as exc:
+        await websocket.send_json({"type": "error", "message": exc.detail})
+        await websocket.close()
+        return
+
+    offsets = {"api.log": 0, "convert.log": 0}
+    last_status = None
+    last_job_mtime = 0.0
+
+    try:
+        while True:
+            job = read_job_json(job_dir)
+            job_mtime = (job_dir / "job.json").stat().st_mtime
+            if job.get("status") != last_status or job_mtime != last_job_mtime:
+                await websocket.send_json({"type": "job", "job": job})
+                last_status = job.get("status")
+                last_job_mtime = job_mtime
+
+            log_names = ["convert.log"] if (job_dir / "convert.log").exists() else ["api.log"]
+            for name in log_names:
+                path = job_dir / name
+                if not path.exists():
+                    continue
+                size = path.stat().st_size
+                if size < offsets[name]:
+                    offsets[name] = 0
+                if size > offsets[name]:
+                    with path.open("r", encoding="utf-8", errors="replace") as f:
+                        f.seek(offsets[name])
+                        chunk = f.read()
+                        offsets[name] = f.tell()
+                    if chunk:
+                        await websocket.send_json({"type": "log", "name": name, "text": chunk})
+
+            if job.get("status") in {"success", "failed"}:
+                await websocket.send_json({"type": "done", "status": job.get("status")})
+                await websocket.close()
+                return
+
+            await asyncio.sleep(0.5)
+    except WebSocketDisconnect:
+        return
 
 
 def run_conversion(

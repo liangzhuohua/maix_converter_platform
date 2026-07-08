@@ -175,8 +175,7 @@ h2 {
 }
 
 .field input[type="text"],
-.field input[type="number"],
-.field input[type="file"] {
+.field input[type="number"] {
   width: 100%;
   min-height: 42px;
   border: 1px solid var(--line-strong);
@@ -187,13 +186,54 @@ h2 {
   outline: none;
 }
 
-.field input[type="file"] {
-  padding: 8px;
-}
-
 .field input:focus {
   border-color: var(--blue);
   box-shadow: 0 0 0 3px rgba(23, 105, 224, 0.14);
+}
+
+.native-file {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+}
+
+.file-control {
+  min-height: 54px;
+  display: grid;
+  grid-template-columns: 104px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--surface-soft);
+  padding: 8px;
+  cursor: pointer;
+}
+
+.file-control:hover {
+  border-color: var(--blue);
+}
+
+.file-control strong {
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background: var(--blue);
+  color: #ffffff;
+  font-size: 13px;
+}
+
+.file-control em {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 13px;
+  font-style: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .grid-two {
@@ -247,6 +287,32 @@ h2 {
 .primary-button:disabled {
   cursor: not-allowed;
   background: #b8c7dc;
+}
+
+.upload-progress {
+  display: none;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e6edf7;
+}
+
+.upload-progress.active {
+  display: block;
+}
+
+.upload-progress-bar {
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--blue);
+  transition: width 120ms ease;
+}
+
+.upload-progress-text {
+  min-height: 18px;
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .secondary-button,
@@ -309,8 +375,8 @@ h2 {
   margin: 14px 0 0;
   border: 1px solid var(--line);
   border-radius: 6px;
-  background: #0c1220;
-  color: #d9e8ff;
+  background: #fbfcff;
+  color: #26364d;
   padding: 14px;
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   font-size: 12px;

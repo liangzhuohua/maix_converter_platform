@@ -1,5 +1,8 @@
 const form = document.querySelector("#jobForm");
 const modelFile = document.querySelector("#modelFile");
+const datasetFile = document.querySelector("#datasetFile");
+const modelFileName = document.querySelector("#modelFileName");
+const datasetFileName = document.querySelector("#datasetFileName");
 const modelName = document.querySelector("#modelName");
 const submitButton = document.querySelector("#submitButton");
 const serverState = document.querySelector("#serverState");
@@ -12,28 +15,38 @@ const refreshButton = document.querySelector("#refreshButton");
 const downloadButton = document.querySelector("#downloadButton");
 const jobsList = document.querySelector("#jobsList");
 const reloadJobs = document.querySelector("#reloadJobs");
+const uploadProgress = document.querySelector("#uploadProgress");
+const uploadProgressBar = document.querySelector("#uploadProgressBar");
+const uploadProgressText = document.querySelector("#uploadProgressText");
 
 let activeJobId = "";
-let pollTimer = null;
+let streamSocket = null;
+let currentLog = "";
 
 modelFile.addEventListener("change", () => {
+  updateFileName(modelFile, modelFileName, "支持 .pt / .onnx");
   if (modelName.value.trim() || !modelFile.files.length) return;
   const name = modelFile.files[0].name.replace(/\.[^.]+$/, "");
   modelName.value = name.replace(/[^A-Za-z0-9_.-]+/g, "_");
+});
+
+datasetFile.addEventListener("change", () => {
+  updateFileName(datasetFile, datasetFileName, "上传 .zip 文件");
 });
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
   submitButton.disabled = true;
   submitButton.textContent = "上传中";
+  resetProgress();
+  setStatus("queued");
+  currentLog = "";
+  logView.textContent = "正在上传文件...";
 
   try {
-    const body = new FormData(form);
-    const response = await fetch("/api/jobs", { method: "POST", body });
-    if (!response.ok) throw new Error(await response.text());
-    const data = await response.json();
+    const data = await uploadJob(new FormData(form));
+    setProgress(100, "上传完成，转换任务已创建");
     setActiveJob(data.job_id);
-    await refreshJob();
     await refreshJobsList();
   } catch (error) {
     logView.textContent = String(error);
@@ -62,41 +75,95 @@ async function checkHealth() {
   }
 }
 
+function uploadJob(body) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", "/api/jobs");
+
+    xhr.upload.addEventListener("progress", (event) => {
+      if (!event.lengthComputable) {
+        uploadProgressText.textContent = "正在上传";
+        return;
+      }
+      const percent = Math.max(1, Math.round((event.loaded / event.total) * 100));
+      setProgress(percent, `正在上传 ${percent}%`);
+    });
+
+    xhr.addEventListener("load", () => {
+      if (xhr.status < 200 || xhr.status >= 300) {
+        reject(new Error(xhr.responseText || `HTTP ${xhr.status}`));
+        return;
+      }
+      try {
+        resolve(JSON.parse(xhr.responseText));
+      } catch (error) {
+        reject(error);
+      }
+    });
+
+    xhr.addEventListener("error", () => reject(new Error("上传失败")));
+    xhr.addEventListener("abort", () => reject(new Error("上传已取消")));
+    xhr.send(body);
+  });
+}
+
 function setActiveJob(id) {
   activeJobId = id;
+  currentLog = "";
   jobId.textContent = id;
   downloadButton.href = "#";
   downloadButton.classList.add("disabled");
   downloadButton.setAttribute("aria-disabled", "true");
+  openLogStream(id);
+}
 
-  if (pollTimer) clearInterval(pollTimer);
-  pollTimer = setInterval(refreshJob, 2000);
+function openLogStream(id) {
+  if (streamSocket) streamSocket.close();
+
+  const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+  streamSocket = new WebSocket(`${protocol}://${window.location.host}/api/jobs/${id}/stream`);
+
+  streamSocket.addEventListener("open", () => {
+    appendLog("日志连接已建立\n");
+  });
+
+  streamSocket.addEventListener("message", (event) => {
+    const data = JSON.parse(event.data);
+    if (data.type === "job") {
+      renderJob(data.job);
+    } else if (data.type === "log") {
+      appendLog(data.text);
+    } else if (data.type === "error") {
+      appendLog(`${data.message}\n`);
+      setStatus("failed");
+    }
+  });
+
+  streamSocket.addEventListener("close", () => {
+    refreshJob();
+    refreshJobsList();
+  });
 }
 
 async function refreshJob() {
   if (!activeJobId) return;
   const response = await fetch(`/api/jobs/${activeJobId}`);
   if (!response.ok) {
-    logView.textContent = await response.text();
+    appendLog(await response.text());
     setStatus("failed");
     return;
   }
 
   const job = await response.json();
   renderJob(job);
-  await refreshLog(activeJobId);
-
-  if (job.status === "success" || job.status === "failed") {
-    if (pollTimer) clearInterval(pollTimer);
-    pollTimer = null;
-  }
 }
 
-async function refreshLog(id) {
-  const response = await fetch(`/api/jobs/${id}/log`);
-  if (!response.ok) return;
-  const text = await response.text();
-  logView.textContent = text || "暂无日志";
+function appendLog(text) {
+  currentLog += text;
+  if (currentLog.length > 180000) {
+    currentLog = currentLog.slice(currentLog.length - 160000);
+  }
+  logView.textContent = currentLog || "暂无日志";
   logView.scrollTop = logView.scrollHeight;
 }
 
@@ -168,6 +235,20 @@ async function refreshJobsList() {
   if (!data.jobs.length) {
     jobsList.innerHTML = '<div class="muted">暂无任务</div>';
   }
+}
+
+function updateFileName(input, target, fallback) {
+  target.textContent = input.files.length ? input.files[0].name : fallback;
+}
+
+function resetProgress() {
+  uploadProgress.classList.add("active");
+  setProgress(0, "等待上传");
+}
+
+function setProgress(percent, text) {
+  uploadProgressBar.style.width = `${percent}%`;
+  uploadProgressText.textContent = text;
 }
 
 checkHealth();
