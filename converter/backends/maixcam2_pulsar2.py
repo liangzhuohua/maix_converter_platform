@@ -112,14 +112,13 @@ def run_and_log(cmd: list[str], log_path: Path, stdin_text: str | None = None) -
             stdin=subprocess.PIPE if stdin_text else None,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
-            text=True,
-            bufsize=1,
         )
         if stdin_text and process.stdin is not None:
-            process.stdin.write(stdin_text)
+            process.stdin.write(stdin_text.encode("utf-8"))
             process.stdin.close()
         assert process.stdout is not None
-        for line in process.stdout:
+        for raw_line in process.stdout:
+            line = raw_line.decode("utf-8", errors="replace")
             print(line, end="")
             log.write(line)
             log.flush()
