@@ -123,7 +123,7 @@ curl http://127.0.0.1:8000/api/health
 ```bash
 curl -X POST http://127.0.0.1:8000/api/jobs \
   -F "model=@inputs/models/yolo26n.pt" \
-  -F "dataset=@inputs/datasets/coco.zip" \
+  -F "dataset=@inputs/datasets.zip" \
   -F "model_name=yolo26n_web_test" \
   -F "images_num=100" \
   -F "imgsz_width=640" \
