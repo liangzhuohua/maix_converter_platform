@@ -44,6 +44,10 @@ def create_job(
     imgsz_height: int = Form(480),
     fast: bool = Form(False),
 ):
+    if images_num < 1 or images_num > 5000:
+        raise HTTPException(status_code=400, detail="images_num must be between 1 and 5000")
+    validate_imgsz(imgsz_width, imgsz_height)
+
     model_suffix = Path(model.filename or "").suffix.lower()
     dataset_suffix = Path(dataset.filename or "").suffix.lower()
     if model_suffix not in MODEL_SUFFIXES:
@@ -62,8 +66,12 @@ def create_job(
 
     model_path = upload_dir / f"{clean_model_name}{model_suffix}"
     dataset_path = upload_dir / f"dataset{dataset_suffix}"
-    save_upload(model, model_path)
-    save_upload(dataset, dataset_path)
+    try:
+        save_upload(model, model_path)
+        save_upload(dataset, dataset_path)
+    except Exception as exc:
+        rmtree(job_dir, ignore_errors=True)
+        raise HTTPException(status_code=500, detail=f"failed to save upload: {exc}") from exc
 
     write_json(
         job_dir / "job.json",
@@ -130,8 +138,11 @@ def get_job_log(job_id: str):
 
 @app.get("/api/jobs/{job_id}/download")
 def download_job(job_id: str):
-    job = read_job_json(get_job_dir(job_id))
+    job_dir = get_job_dir(job_id)
+    job = read_job_json(job_dir)
     zip_path = Path(job.get("zip", ""))
+    if not is_relative_to(zip_path.resolve(), job_dir.resolve()):
+        raise HTTPException(status_code=400, detail="invalid result zip path")
     if not zip_path.is_file():
         raise HTTPException(status_code=404, detail="result zip is not ready")
     return FileResponse(zip_path, filename=zip_path.name)
@@ -140,7 +151,12 @@ def download_job(job_id: str):
 @app.delete("/api/jobs/{job_id}")
 def delete_job(job_id: str):
     job_dir = get_job_dir(job_id)
-    job = read_job_json(job_dir)
+    try:
+        job = read_job_json(job_dir)
+    except HTTPException as exc:
+        if exc.status_code != 404:
+            raise
+        job = {"status": "unknown", "docker_image": "pulsar2:6.0"}
     if job.get("status") in {"queued", "running"}:
         raise HTTPException(status_code=409, detail="cannot delete a queued or running job")
     remove_job_dir(job_dir, docker_image=job.get("docker_image", "pulsar2:6.0"))
@@ -163,8 +179,17 @@ async def stream_job(websocket: WebSocket, job_id: str):
 
     try:
         while True:
-            job = read_job_json(job_dir)
-            job_mtime = (job_dir / "job.json").stat().st_mtime
+            try:
+                job = read_job_json(job_dir)
+                job_mtime = (job_dir / "job.json").stat().st_mtime
+            except HTTPException as exc:
+                await websocket.send_json({"type": "error", "message": exc.detail})
+                await websocket.close()
+                return
+            except FileNotFoundError:
+                await websocket.send_json({"type": "error", "message": "job was deleted"})
+                await websocket.close()
+                return
             if job.get("status") != last_status or job_mtime != last_job_mtime:
                 await websocket.send_json({"type": "job", "job": job})
                 last_status = job.get("status")
@@ -231,7 +256,7 @@ def run_conversion(
     with api_log.open("w", encoding="utf-8") as log:
         log.write("+ " + " ".join(cmd) + "\n")
         log.flush()
-        subprocess.run(
+        result = subprocess.run(
             cmd,
             cwd=BASE_DIR,
             stdout=log,
@@ -239,6 +264,8 @@ def run_conversion(
             text=True,
             check=False,
         )
+        if result.returncode != 0:
+            ensure_failed_job(job_dir, f"converter exited with code {result.returncode}")
 
 
 def save_upload(upload: UploadFile, path: Path) -> None:
@@ -328,9 +355,11 @@ def get_job_dir(job_id: str) -> Path:
 
 
 def write_json(path: Path, data: dict) -> None:
-    with path.open("w", encoding="utf-8") as f:
+    tmp = path.with_name(path.name + ".tmp")
+    with tmp.open("w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
         f.write("\n")
+    os.replace(tmp, path)
 
 
 def new_job_id(model_name: str) -> str:
@@ -345,4 +374,27 @@ def now_iso() -> str:
 def slugify(value: str) -> str:
     value = value.strip()
     value = re.sub(r"[^A-Za-z0-9_.-]+", "_", value)
-    return value.strip("._-")
+    return value.strip("._-")[:80]
+
+
+def validate_imgsz(width: int, height: int) -> None:
+    for name, value in [("imgsz_width", width), ("imgsz_height", height)]:
+        if value < 32 or value > 4096:
+            raise HTTPException(status_code=400, detail=f"{name} must be between 32 and 4096")
+        if value % 32 != 0:
+            raise HTTPException(status_code=400, detail=f"{name} must be a multiple of 32")
+
+
+def is_relative_to(path: Path, root: Path) -> bool:
+    return root == path or root in path.parents
+
+
+def ensure_failed_job(job_dir: Path, error: str) -> None:
+    try:
+        job = read_job_json(job_dir)
+    except HTTPException:
+        job = {"job_id": job_dir.name, "created_at": now_iso()}
+    if job.get("status") in {"success", "failed"}:
+        return
+    job.update({"status": "failed", "completed_at": now_iso(), "error": error})
+    write_json(job_dir / "job.json", job)

@@ -1,5 +1,7 @@
 import argparse
 import json
+import os
+import re
 import zipfile
 from datetime import datetime
 from pathlib import Path
@@ -42,8 +44,13 @@ def main():
 
     model_path = Path(args.model).expanduser().resolve()
     dataset_path = Path(args.dataset).expanduser().resolve()
-    model_name = args.model_name.strip() or model_path.stem
+    model_name = clean_model_name(args.model_name.strip() or model_path.stem)
     labels = parse_labels(args.labels)
+
+    if args.images_num < 1:
+        raise ValueError("--images-num must be >= 1")
+    width, height = args.imgsz
+    validate_imgsz(width, height)
 
     if args.job_dir:
         job_dir = Path(args.job_dir).expanduser().resolve()
@@ -80,7 +87,6 @@ def main():
 
         suffix = model_path.suffix.lower()
         if suffix == ".pt":
-            width, height = args.imgsz
             model_path = export_pt_to_onnx(
                 pt_path=model_path,
                 job_dir=job_dir,
@@ -173,9 +179,26 @@ def extract_zip_safely(zip_path: Path, dst_dir: Path) -> None:
 
 def write_job_json(job_dir: Path, metadata: dict) -> None:
     path = job_dir / "job.json"
-    with path.open("w", encoding="utf-8") as f:
+    tmp = path.with_name(path.name + ".tmp")
+    with tmp.open("w", encoding="utf-8") as f:
         json.dump(metadata, f, indent=2, ensure_ascii=False)
         f.write("\n")
+    os.replace(tmp, path)
+
+
+def clean_model_name(value: str) -> str:
+    cleaned = re.sub(r"[^A-Za-z0-9_.-]+", "_", value.strip()).strip("._-")
+    if not cleaned:
+        raise ValueError("--model-name cannot be empty")
+    return cleaned[:80]
+
+
+def validate_imgsz(width: int, height: int) -> None:
+    for name, value in [("width", width), ("height", height)]:
+        if value < 32 or value > 4096:
+            raise ValueError(f"--imgsz {name} must be between 32 and 4096")
+        if value % 32 != 0:
+            raise ValueError(f"--imgsz {name} must be a multiple of 32")
 
 
 def now_iso() -> str:

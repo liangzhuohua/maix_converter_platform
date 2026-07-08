@@ -92,7 +92,7 @@ function uploadJob(body) {
 
     xhr.addEventListener("load", () => {
       if (xhr.status < 200 || xhr.status >= 300) {
-        reject(new Error(xhr.responseText || `HTTP ${xhr.status}`));
+        reject(new Error(parseErrorText(xhr.responseText, `HTTP ${xhr.status}`)));
         return;
       }
       try {
@@ -130,7 +130,13 @@ function openLogStream(id) {
   });
 
   streamSocket.addEventListener("message", (event) => {
-    const data = JSON.parse(event.data);
+    let data;
+    try {
+      data = JSON.parse(event.data);
+    } catch {
+      appendLog(`${event.data}\n`);
+      return;
+    }
     if (data.type === "job") {
       renderJob(data.job);
     } else if (data.type === "log") {
@@ -151,7 +157,7 @@ async function refreshJob() {
   if (!activeJobId) return;
   const response = await fetch(`/api/jobs/${activeJobId}`);
   if (!response.ok) {
-    appendLog(await response.text());
+    appendLog(`${parseErrorText(await response.text(), `HTTP ${response.status}`)}\n`);
     setStatus("failed");
     return;
   }
@@ -274,7 +280,7 @@ async function deleteJob(id) {
 
   const response = await fetch(`/api/jobs/${id}`, { method: "DELETE" });
   if (!response.ok) {
-    alert(await response.text());
+    alert(parseErrorText(await response.text(), `删除失败：HTTP ${response.status}`));
     return;
   }
 
@@ -308,3 +314,15 @@ function hideProgressSoon() {
 checkHealth();
 refreshJobsList();
 setInterval(refreshJobsList, 5000);
+
+function parseErrorText(text, fallback) {
+  if (!text) return fallback;
+  try {
+    const data = JSON.parse(text);
+    if (typeof data.detail === "string") return data.detail;
+    if (Array.isArray(data.detail)) return data.detail.map((item) => item.msg || JSON.stringify(item)).join("\n");
+  } catch {
+    return text;
+  }
+  return fallback;
+}

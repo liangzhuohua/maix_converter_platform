@@ -9,7 +9,6 @@ import time
 from pathlib import Path
 
 from converter.yolo.mud import write_maixcam2_yolo_mud
-from converter.yolo.node_profiles import get_output_nodes
 
 
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".bmp"}
@@ -46,8 +45,8 @@ def prepare_job(
     for old in images_dir.iterdir():
         if old.is_file():
             old.unlink()
-    for image in images[:images_num]:
-        shutil.copy2(image, images_dir / image.name)
+    for index, image in enumerate(images[:images_num]):
+        shutil.copy2(image, images_dir / f"{index:06d}_{image.name}")
 
     write_maixcam2_yolo_mud(
         out_dir / f"{model_name}.mud",
