@@ -258,7 +258,8 @@ h2 {
 
 .primary-button,
 .secondary-button,
-.download-button {
+.download-button,
+.danger-button {
   min-height: 40px;
   display: inline-flex;
   align-items: center;
@@ -325,6 +326,25 @@ h2 {
   background: #ffffff;
   border-color: var(--line-strong);
   color: var(--text);
+}
+
+.danger-button {
+  min-height: 32px;
+  background: #ffffff;
+  border-color: #f0b9b9;
+  color: var(--red);
+}
+
+.danger-button:hover {
+  border-color: var(--red);
+  background: var(--red-soft);
+}
+
+.danger-button:disabled {
+  cursor: not-allowed;
+  border-color: var(--line);
+  background: var(--surface-soft);
+  color: #a8b2c2;
 }
 
 .secondary-button:hover,
@@ -430,6 +450,12 @@ h2 {
 
 .job-row button {
   min-height: 32px;
+}
+
+.row-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .job-id {

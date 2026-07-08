@@ -233,7 +233,18 @@ async function refreshJobsList() {
       refreshJob();
     });
 
-    row.append(id, status, time, button);
+    const deleteButton = document.createElement("button");
+    deleteButton.className = "danger-button";
+    deleteButton.type = "button";
+    deleteButton.textContent = "删除";
+    deleteButton.disabled = job.status === "queued" || job.status === "running";
+    deleteButton.addEventListener("click", () => deleteJob(job.job_id));
+
+    const actions = document.createElement("div");
+    actions.className = "row-actions";
+    actions.append(button, deleteButton);
+
+    row.append(id, status, time, actions);
     jobsList.append(row);
   }
 
@@ -257,6 +268,34 @@ function setProgress(percent, text) {
   uploadProgressText.textContent = text;
 }
 
+async function deleteJob(id) {
+  const ok = window.confirm(`删除任务 ${id}？\n任务目录和转换结果都会被删除。`);
+  if (!ok) return;
+
+  const response = await fetch(`/api/jobs/${id}`, { method: "DELETE" });
+  if (!response.ok) {
+    alert(await response.text());
+    return;
+  }
+
+  if (activeJobId === id) {
+    if (streamSocket) streamSocket.close();
+    activeJobId = "";
+    currentLog = "";
+    jobId.textContent = "-";
+    jobModel.textContent = "-";
+    jobDone.textContent = "-";
+    setStatus("idle");
+    logView.textContent = "任务已删除";
+    downloadButton.href = "#";
+    downloadButton.classList.add("disabled");
+    downloadButton.classList.remove("ready");
+    downloadButton.setAttribute("aria-disabled", "true");
+  }
+
+  await refreshJobsList();
+}
+
 function hideProgressSoon() {
   setTimeout(() => {
     uploadProgress.classList.remove("active");
@@ -268,3 +307,4 @@ function hideProgressSoon() {
 
 checkHealth();
 refreshJobsList();
+setInterval(refreshJobsList, 5000);

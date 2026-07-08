@@ -6,7 +6,7 @@ import sys
 import threading
 from datetime import datetime
 from pathlib import Path
-from shutil import copyfileobj
+from shutil import copyfileobj, rmtree
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, PlainTextResponse
@@ -134,6 +134,16 @@ def download_job(job_id: str):
     if not zip_path.is_file():
         raise HTTPException(status_code=404, detail="result zip is not ready")
     return FileResponse(zip_path, filename=zip_path.name)
+
+
+@app.delete("/api/jobs/{job_id}")
+def delete_job(job_id: str):
+    job_dir = get_job_dir(job_id)
+    job = read_job_json(job_dir)
+    if job.get("status") in {"queued", "running"}:
+        raise HTTPException(status_code=409, detail="cannot delete a queued or running job")
+    rmtree(job_dir)
+    return {"deleted": True, "job_id": job_id}
 
 
 @app.websocket("/api/jobs/{job_id}/stream")
