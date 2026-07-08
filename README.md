@@ -151,13 +151,30 @@ docker tag pulsar2:3.3 pulsar2:6.0
 docker images | grep pulsar2
 ```
 
-最后可以简单验证容器里能找到 `pulsar2` 命令：
+最后可以简单验证容器里的 Pulsar2 是否可用：
 
 ```bash
-docker run --rm --entrypoint /bin/bash pulsar2:6.0 -lc "pulsar2 --help | head"
+docker run --rm pulsar2:6.0 -c "pulsar2 version"
 ```
 
-如果这条命令能打印 Pulsar2 帮助信息，就说明镜像基本可用。
+如果输出类似下面这样，就说明镜像基本可用：
+
+```text
+version: 6.0
+commit: 48520c11
+```
+
+也可以查看 Pulsar2 支持的子命令：
+
+```bash
+docker run --rm pulsar2:6.0 -c "pulsar2 --help | head -20"
+```
+
+正常会看到类似：
+
+```text
+usage: main.py [-h] {version,build,run,llm_build} ...
+```
 
 > 平台运行转换任务时会自动调用 Docker，不需要你手动进入容器。只有在排查环境问题时，才需要手动运行上面的验证命令。
 
