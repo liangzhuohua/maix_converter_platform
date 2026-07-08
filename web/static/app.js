@@ -21,6 +21,7 @@ const uploadProgressText = document.querySelector("#uploadProgressText");
 
 let activeJobId = "";
 let streamSocket = null;
+let jobsSource = null;
 let currentLog = "";
 
 modelFile.addEventListener("change", () => {
@@ -212,9 +213,13 @@ async function refreshJobsList() {
   const response = await fetch("/api/jobs");
   if (!response.ok) return;
   const data = await response.json();
+  renderJobsList(data.jobs);
+}
+
+function renderJobsList(jobs) {
   jobsList.innerHTML = "";
 
-  for (const job of data.jobs.slice(0, 8)) {
+  for (const job of jobs.slice(0, 8)) {
     const row = document.createElement("div");
     row.className = "job-row";
 
@@ -254,9 +259,35 @@ async function refreshJobsList() {
     jobsList.append(row);
   }
 
-  if (!data.jobs.length) {
+  if (!jobs.length) {
     jobsList.innerHTML = '<div class="muted">暂无任务</div>';
   }
+}
+
+function openJobsEvents() {
+  if (!window.EventSource) {
+    refreshJobsList();
+    return;
+  }
+  if (jobsSource) jobsSource.close();
+
+  jobsSource = new EventSource("/api/jobs/events");
+  jobsSource.addEventListener("jobs", (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      renderJobsList(data.jobs || []);
+    } catch (error) {
+      console.error("failed to parse jobs event", error);
+    }
+  });
+  jobsSource.addEventListener("error", () => {
+    serverState.textContent = "任务推送重连中";
+    serverState.classList.remove("ok");
+  });
+  jobsSource.addEventListener("open", () => {
+    serverState.textContent = "API 在线";
+    serverState.classList.add("ok");
+  });
 }
 
 function updateFileName(input, target, fallback) {
@@ -312,8 +343,7 @@ function hideProgressSoon() {
 }
 
 checkHealth();
-refreshJobsList();
-setInterval(refreshJobsList, 5000);
+openJobsEvents();
 
 function parseErrorText(text, fallback) {
   if (!text) return fallback;

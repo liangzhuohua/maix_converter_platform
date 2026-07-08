@@ -118,7 +118,15 @@ uvicorn web.app:app --host 0.0.0.0 --port 8000
 http://127.0.0.1:8000/
 ```
 
-页面支持模型上传、数据集上传、上传进度、实时日志、任务状态、结果 zip 下载和任务删除。最近任务列表会自动刷新。日志使用 WebSocket 增量推送：
+页面支持模型上传、数据集上传、上传进度、实时日志、任务状态、结果 zip 下载和任务删除。
+
+最近任务列表使用 SSE 单向推送，服务端在任务摘要变化时发送新列表：
+
+```text
+GET /api/jobs/events
+```
+
+单个任务日志使用 WebSocket 增量推送：
 
 ```text
 WS /api/jobs/{job_id}/stream
@@ -162,6 +170,7 @@ curl -L -o result.zip http://127.0.0.1:8000/api/jobs/<job_id>/download
 GET  /api/health
 POST /api/jobs
 GET  /api/jobs
+GET  /api/jobs/events
 GET  /api/jobs/{job_id}
 GET  /api/jobs/{job_id}/log
 GET  /api/jobs/{job_id}/download

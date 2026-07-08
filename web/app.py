@@ -9,8 +9,8 @@ from datetime import datetime
 from pathlib import Path
 from shutil import copyfileobj, rmtree
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse, PlainTextResponse
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse, PlainTextResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 
@@ -110,12 +110,39 @@ def create_job(
 
 @app.get("/api/jobs")
 def list_jobs():
-    jobs = []
-    if JOBS_DIR.exists():
-        for path in sorted(JOBS_DIR.iterdir(), reverse=True):
-            if path.is_dir():
-                jobs.append(read_job_summary(path))
-    return {"jobs": jobs}
+    return {"jobs": read_jobs_list()}
+
+
+@app.get("/api/jobs/events")
+async def stream_jobs(request: Request):
+    async def events():
+        last_payload = ""
+        idle_ticks = 0
+        while True:
+            if await request.is_disconnected():
+                return
+
+            payload = json.dumps({"jobs": read_jobs_list()}, ensure_ascii=False, sort_keys=True)
+            if payload != last_payload:
+                yield f"event: jobs\ndata: {payload}\n\n"
+                last_payload = payload
+                idle_ticks = 0
+            else:
+                idle_ticks += 1
+                if idle_ticks >= 15:
+                    yield ": keep-alive\n\n"
+                    idle_ticks = 0
+
+            await asyncio.sleep(1.0)
+
+    return StreamingResponse(
+        events(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @app.get("/api/jobs/{job_id}")
@@ -333,6 +360,15 @@ def read_job_summary(job_dir: Path) -> dict:
         "created_at": job.get("created_at", ""),
         "completed_at": job.get("completed_at", ""),
     }
+
+
+def read_jobs_list() -> list[dict]:
+    jobs = []
+    if JOBS_DIR.exists():
+        for path in sorted(JOBS_DIR.iterdir(), reverse=True):
+            if path.is_dir():
+                jobs.append(read_job_summary(path))
+    return jobs
 
 
 def read_job_json(job_dir: Path) -> dict:
