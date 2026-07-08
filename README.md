@@ -6,6 +6,7 @@
 
 - YOLO26 `.onnx`
 - YOLO26 `.pt`，会先用 Ultralytics 导出 ONNX，再进入 MaixCam2 转换流程
+- 量化图片目录或 `.zip` 压缩包
 
 ## 输入目录
 
@@ -19,6 +20,7 @@ inputs/
     coco/
       000000000139.jpg
       000000000285.jpg
+    coco.zip
 ```
 
 ## 命令行测试
@@ -47,6 +49,19 @@ python convert_cli.py \
 ```
 
 `--imgsz 640 480` 表示宽 640、高 480，导出的 ONNX 输入形状是 `[1, 3, 480, 640]`。
+
+量化数据集也可以传 zip：
+
+```bash
+python convert_cli.py \
+  --model inputs/models/yolo26n.pt \
+  --dataset inputs/datasets/coco.zip \
+  --model-name yolo26n \
+  --imgsz 640 480 \
+  --images-num 100
+```
+
+zip 里可以直接放图片，也可以有一层或多层目录，程序会递归查找 `.jpg/.jpeg/.png/.bmp`。
 
 调试转换流程时可以加 `--fast`，会关闭 Pulsar2 精度分析和输出校验，转换会更快：
 

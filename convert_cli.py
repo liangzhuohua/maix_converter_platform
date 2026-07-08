@@ -12,7 +12,7 @@ from converter.yolo.labels import parse_labels
 def main():
     parser = argparse.ArgumentParser(description="Convert YOLO26 detect model to MaixCam2 axmodel.")
     parser.add_argument("--model", required=True, help="YOLO26 .pt or .onnx model path")
-    parser.add_argument("--dataset", required=True, help="calibration image directory")
+    parser.add_argument("--dataset", required=True, help="calibration image directory or .zip file")
     parser.add_argument("--model-name", default="", help="output model base name, default is model stem")
     parser.add_argument("--labels", default="", help="comma separated labels, default is COCO labels")
     parser.add_argument("--images-num", type=int, default=100, help="number of calibration images")
@@ -40,7 +40,7 @@ def main():
     args = parser.parse_args()
 
     model_path = Path(args.model).expanduser().resolve()
-    dataset_dir = Path(args.dataset).expanduser().resolve()
+    dataset_path = Path(args.dataset).expanduser().resolve()
     model_name = args.model_name.strip() or model_path.stem
     labels = parse_labels(args.labels)
 
@@ -55,7 +55,8 @@ def main():
         "model_name": model_name,
         "input_model": str(model_path),
         "input_suffix": model_path.suffix.lower(),
-        "dataset": str(dataset_dir),
+        "dataset": str(dataset_path),
+        "dataset_suffix": dataset_path.suffix.lower(),
         "labels_num": len(labels),
         "images_num": args.images_num,
         "imgsz": args.imgsz,
@@ -69,6 +70,10 @@ def main():
     write_job_json(job_dir, metadata)
 
     try:
+        dataset_dir = prepare_dataset_path(dataset_path, job_dir)
+        metadata["prepared_dataset"] = str(dataset_dir)
+        write_job_json(job_dir, metadata)
+
         suffix = model_path.suffix.lower()
         if suffix == ".pt":
             width, height = args.imgsz
@@ -139,6 +144,27 @@ def package_outputs(job_dir: Path, model_name: str) -> Path:
         for path in files:
             zf.write(path, arcname=path.name)
     return zip_path
+
+
+def prepare_dataset_path(dataset_path: Path, job_dir: Path) -> Path:
+    if dataset_path.is_dir():
+        return dataset_path
+    if dataset_path.is_file() and dataset_path.suffix.lower() == ".zip":
+        dst = job_dir / "dataset"
+        dst.mkdir(parents=True, exist_ok=True)
+        extract_zip_safely(dataset_path, dst)
+        return dst
+    raise FileNotFoundError(f"dataset must be an image directory or .zip file: {dataset_path}")
+
+
+def extract_zip_safely(zip_path: Path, dst_dir: Path) -> None:
+    dst_root = dst_dir.resolve()
+    with zipfile.ZipFile(zip_path) as zf:
+        for info in zf.infolist():
+            target = (dst_dir / info.filename).resolve()
+            if dst_root not in [target, *target.parents]:
+                raise ValueError(f"unsafe zip entry: {info.filename}")
+            zf.extract(info, dst_dir)
 
 
 def write_job_json(job_dir: Path, metadata: dict) -> None:

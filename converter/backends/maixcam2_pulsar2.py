@@ -38,7 +38,7 @@ def prepare_job(
 
     shutil.copy2(model_path, job_dir / f"{model_name}.onnx")
 
-    images = sorted(p for p in dataset_dir.iterdir() if p.suffix.lower() in IMAGE_SUFFIXES)
+    images = sorted(p for p in dataset_dir.rglob("*") if p.is_file() and p.suffix.lower() in IMAGE_SUFFIXES)
     if len(images) < images_num:
         raise ValueError(f"not enough calibration images: have {len(images)}, need {images_num}")
     for old in images_dir.iterdir():
