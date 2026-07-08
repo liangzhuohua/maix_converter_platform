@@ -95,3 +95,62 @@ jobs/20260708_120000_yolo26n_maixcam2_yolo26/
 `job.json` 会记录本次转换参数、状态、输出目录、日志路径和 zip 路径。转换失败时也会写入 `status: failed` 和错误信息。
 
 `yolo26n_maixcam2_yolo26.zip` 可以直接解压后复制到 MaixCam2。
+
+## Web API
+
+Web 后端使用 FastAPI。因为 `.pt` 导出依赖 `ultralytics`，建议在你的 conda `yolo` 环境里安装和运行：
+
+```bash
+cd /home/ziyue/maixcam2_model/maix_converter_platform
+conda activate yolo
+pip install -r requirements-web.txt
+```
+
+启动服务：
+
+```bash
+uvicorn web.app:app --host 0.0.0.0 --port 8000
+```
+
+健康检查：
+
+```bash
+curl http://127.0.0.1:8000/api/health
+```
+
+创建转换任务：
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/jobs \
+  -F "model=@inputs/models/yolo26n.pt" \
+  -F "dataset=@inputs/datasets/coco.zip" \
+  -F "model_name=yolo26n_web_test" \
+  -F "images_num=100" \
+  -F "imgsz_width=640" \
+  -F "imgsz_height=480" \
+  -F "fast=true"
+```
+
+返回里的 `job_id` 用来查询状态：
+
+```bash
+curl http://127.0.0.1:8000/api/jobs/<job_id>
+curl http://127.0.0.1:8000/api/jobs/<job_id>/log
+```
+
+转换完成后下载 zip：
+
+```bash
+curl -L -o result.zip http://127.0.0.1:8000/api/jobs/<job_id>/download
+```
+
+当前接口：
+
+```text
+GET  /api/health
+POST /api/jobs
+GET  /api/jobs
+GET  /api/jobs/{job_id}
+GET  /api/jobs/{job_id}/log
+GET  /api/jobs/{job_id}/download
+```

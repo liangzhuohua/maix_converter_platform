@@ -37,6 +37,7 @@ def main():
     )
     parser.add_argument("--docker-image", default="pulsar2:6.0", help="Pulsar2 docker image")
     parser.add_argument("--jobs-dir", default="jobs", help="job output root directory")
+    parser.add_argument("--job-dir", default="", help="exact job directory, mainly used by the web API")
     args = parser.parse_args()
 
     model_path = Path(args.model).expanduser().resolve()
@@ -44,8 +45,11 @@ def main():
     model_name = args.model_name.strip() or model_path.stem
     labels = parse_labels(args.labels)
 
-    jobs_root = Path(args.jobs_dir).expanduser().resolve()
-    job_dir = new_job_dir(jobs_root, model_name)
+    if args.job_dir:
+        job_dir = Path(args.job_dir).expanduser().resolve()
+    else:
+        jobs_root = Path(args.jobs_dir).expanduser().resolve()
+        job_dir = new_job_dir(jobs_root, model_name)
     job_dir.mkdir(parents=True, exist_ok=True)
     print("job:", job_dir)
 
