@@ -5,7 +5,7 @@ import re
 import subprocess
 import sys
 import threading
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from shutil import copyfileobj, rmtree
 
@@ -16,14 +16,50 @@ from fastapi.staticfiles import StaticFiles
 from converter.yolo.node_profiles import get_yolo_profile
 
 
+def read_env_int(name: str, default: int, min_value: int = 0) -> int:
+    value = os.getenv(name, "")
+    if not value:
+        return default
+    try:
+        parsed = int(value)
+    except ValueError:
+        return default
+    return max(min_value, parsed)
+
+
 BASE_DIR = Path(__file__).resolve().parents[1]
 JOBS_DIR = BASE_DIR / "jobs"
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 MODEL_SUFFIXES = {".pt", ".onnx"}
 DATASET_SUFFIXES = {".zip"}
+FINISHED_STATUSES = {"success", "failed"}
+ACTIVE_STATUSES = {"queued", "running"}
+JOBS_AUTO_CLEAN = os.getenv("MAIX_JOBS_AUTO_CLEAN", "1").lower() not in {"0", "false", "no", "off"}
+JOBS_KEEP_DAYS = read_env_int("MAIX_JOBS_KEEP_DAYS", 7, min_value=0)
+JOBS_KEEP_COUNT = read_env_int("MAIX_JOBS_KEEP_COUNT", 30, min_value=0)
+JOBS_CLEAN_INTERVAL_SECONDS = read_env_int("MAIX_JOBS_CLEAN_INTERVAL_SECONDS", 21600, min_value=60)
+cleanup_stop_event = threading.Event()
+cleanup_thread: threading.Thread | None = None
 
 app = FastAPI(title="Maix Converter Platform")
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+
+@app.on_event("startup")
+def start_job_cleanup() -> None:
+    global cleanup_thread
+    if not JOBS_AUTO_CLEAN:
+        return
+    if cleanup_thread and cleanup_thread.is_alive():
+        return
+    cleanup_stop_event.clear()
+    cleanup_thread = threading.Thread(target=job_cleanup_loop, name="job-cleanup", daemon=True)
+    cleanup_thread.start()
+
+
+@app.on_event("shutdown")
+def stop_job_cleanup() -> None:
+    cleanup_stop_event.set()
 
 
 @app.get("/")
@@ -195,7 +231,7 @@ def delete_job(job_id: str):
         if exc.status_code != 404:
             raise
         job = {"status": "unknown", "docker_image": "pulsar2:6.0"}
-    if job.get("status") in {"queued", "running"}:
+    if job.get("status") in ACTIVE_STATUSES:
         raise HTTPException(status_code=409, detail="cannot delete a queued or running job")
     remove_job_dir(job_dir, docker_image=job.get("docker_image", "pulsar2:6.0"))
     return {"deleted": True, "job_id": job_id}
@@ -312,6 +348,77 @@ def run_conversion(
 def save_upload(upload: UploadFile, path: Path) -> None:
     with path.open("wb") as f:
         copyfileobj(upload.file, f)
+
+
+def job_cleanup_loop() -> None:
+    cleanup_finished_jobs("startup")
+    while not cleanup_stop_event.wait(JOBS_CLEAN_INTERVAL_SECONDS):
+        cleanup_finished_jobs("scheduled")
+
+
+def cleanup_finished_jobs(reason: str) -> dict:
+    if JOBS_KEEP_DAYS <= 0 and JOBS_KEEP_COUNT <= 0:
+        return {"deleted": [], "failed": [], "reason": reason}
+    if not JOBS_DIR.exists():
+        return {"deleted": [], "failed": [], "reason": reason}
+
+    candidates = []
+    for job_dir in JOBS_DIR.iterdir():
+        if not job_dir.is_dir():
+            continue
+        try:
+            job = read_job_json(job_dir)
+        except HTTPException:
+            continue
+        status = job.get("status")
+        if status in ACTIVE_STATUSES or status not in FINISHED_STATUSES:
+            continue
+        candidates.append(
+            {
+                "job_dir": job_dir,
+                "job": job,
+                "time": get_job_sort_time(job_dir, job),
+            }
+        )
+
+    delete_dirs = set()
+    now = datetime.now()
+    if JOBS_KEEP_DAYS > 0:
+        cutoff = now - timedelta(days=JOBS_KEEP_DAYS)
+        delete_dirs.update(item["job_dir"] for item in candidates if item["time"] < cutoff)
+
+    if JOBS_KEEP_COUNT > 0:
+        newest_first = sorted(candidates, key=lambda item: item["time"], reverse=True)
+        delete_dirs.update(item["job_dir"] for item in newest_first[JOBS_KEEP_COUNT:])
+
+    deleted = []
+    failed = []
+    for job_dir in sorted(delete_dirs):
+        job = next((item["job"] for item in candidates if item["job_dir"] == job_dir), {})
+        try:
+            remove_job_dir(job_dir, docker_image=job.get("docker_image", "pulsar2:6.0"))
+            deleted.append(job_dir.name)
+        except Exception as exc:
+            failed.append({"job_id": job_dir.name, "error": str(exc)})
+
+    if deleted or failed:
+        print(
+            "[job-cleanup]",
+            json.dumps({"reason": reason, "deleted": deleted, "failed": failed}, ensure_ascii=False),
+            file=sys.stderr,
+        )
+    return {"deleted": deleted, "failed": failed, "reason": reason}
+
+
+def get_job_sort_time(job_dir: Path, job: dict) -> datetime:
+    for key in ["completed_at", "created_at"]:
+        value = job.get(key)
+        if isinstance(value, str) and value:
+            try:
+                return datetime.fromisoformat(value)
+            except ValueError:
+                pass
+    return datetime.fromtimestamp(job_dir.stat().st_mtime)
 
 
 def remove_job_dir(job_dir: Path, docker_image: str) -> None:

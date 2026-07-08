@@ -113,6 +113,33 @@ jobs/20260708_120000_yolo26n_maixcam2_yolo26/
 
 把这些文件复制到 MaixCam2 上同一个目录里，然后在 MaixPy 代码中加载 `.mud`。
 
+## 任务清理
+
+平台默认会自动清理旧任务，避免 `jobs/` 越堆越大。
+
+默认规则：
+
+- 只清理 `jobs/<job_id>/` 任务目录
+- 不会清理项目根目录下的 `inputs/`
+- 不会清理 `queued` 或 `running` 任务
+- 已结束任务超过 7 天会被清理
+- 已结束任务超过 30 个时，会优先清理更旧的任务
+- Web 服务启动时清理一次，之后每 6 小时清理一次
+
+可以用环境变量调整：
+
+```bash
+MAIX_JOBS_KEEP_DAYS=7
+MAIX_JOBS_KEEP_COUNT=30
+MAIX_JOBS_CLEAN_INTERVAL_SECONDS=21600
+```
+
+关闭自动清理：
+
+```bash
+MAIX_JOBS_AUTO_CLEAN=0
+```
+
 下面以 YOLO11 为例：
 
 ```python
