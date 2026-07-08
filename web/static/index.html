@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Maix Converter Platform</title>
+    <link rel="stylesheet" href="/static/style.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <span class="mark">M</span>
+        <div>
+          <h1>Maix Converter</h1>
+          <p>YOLO26 / MaixCam2</p>
+        </div>
+      </div>
+      <div class="server-state" id="serverState">API 检查中</div>
+    </header>
+
+    <main class="workspace">
+      <section class="panel form-panel">
+        <div class="panel-head">
+          <h2>转换任务</h2>
+          <span class="chip">Pulsar2</span>
+        </div>
+
+        <form id="jobForm" class="job-form">
+          <label class="field">
+            <span>模型文件</span>
+            <input id="modelFile" name="model" type="file" accept=".pt,.onnx" required />
+          </label>
+
+          <label class="field">
+            <span>量化数据集</span>
+            <input id="datasetFile" name="dataset" type="file" accept=".zip" required />
+          </label>
+
+          <label class="field">
+            <span>模型名称</span>
+            <input id="modelName" name="model_name" type="text" placeholder="yolo26n" />
+          </label>
+
+          <div class="grid-two">
+            <label class="field">
+              <span>图片数量</span>
+              <input name="images_num" type="number" min="1" value="100" required />
+            </label>
+            <label class="field toggle-field">
+              <input name="fast" type="checkbox" checked />
+              <span>Fast</span>
+            </label>
+          </div>
+
+          <div class="grid-two">
+            <label class="field">
+              <span>宽度</span>
+              <input name="imgsz_width" type="number" min="32" step="32" value="640" required />
+            </label>
+            <label class="field">
+              <span>高度</span>
+              <input name="imgsz_height" type="number" min="32" step="32" value="480" required />
+            </label>
+          </div>
+
+          <button id="submitButton" class="primary-button" type="submit">开始转换</button>
+        </form>
+      </section>
+
+      <section class="panel monitor-panel">
+        <div class="panel-head">
+          <h2>任务监控</h2>
+          <span class="status-badge idle" id="jobStatus">未开始</span>
+        </div>
+
+        <div class="job-meta">
+          <div>
+            <span>Job ID</span>
+            <strong id="jobId">-</strong>
+          </div>
+          <div>
+            <span>模型</span>
+            <strong id="jobModel">-</strong>
+          </div>
+          <div>
+            <span>完成时间</span>
+            <strong id="jobDone">-</strong>
+          </div>
+        </div>
+
+        <div class="actions">
+          <button id="refreshButton" class="secondary-button" type="button">刷新</button>
+          <a id="downloadButton" class="download-button disabled" href="#" aria-disabled="true">下载结果</a>
+        </div>
+
+        <pre id="logView" class="log-view">等待任务输出...</pre>
+      </section>
+    </main>
+
+    <section class="jobs-band">
+      <div class="jobs-head">
+        <h2>最近任务</h2>
+        <button id="reloadJobs" class="secondary-button" type="button">更新列表</button>
+      </div>
+      <div id="jobsList" class="jobs-list"></div>
+    </section>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>

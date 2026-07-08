@@ -9,14 +9,22 @@ from shutil import copyfileobj
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, PlainTextResponse
+from fastapi.staticfiles import StaticFiles
 
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 JOBS_DIR = BASE_DIR / "jobs"
+STATIC_DIR = Path(__file__).resolve().parent / "static"
 MODEL_SUFFIXES = {".pt", ".onnx"}
 DATASET_SUFFIXES = {".zip"}
 
 app = FastAPI(title="Maix Converter Platform")
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+
+@app.get("/")
+def index():
+    return FileResponse(STATIC_DIR / "index.html")
 
 
 @app.get("/api/health")

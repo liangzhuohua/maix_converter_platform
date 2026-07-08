@@ -112,6 +112,12 @@ pip install -r requirements-web.txt
 uvicorn web.app:app --host 0.0.0.0 --port 8000
 ```
 
+浏览器打开：
+
+```text
+http://127.0.0.1:8000/
+```
+
 健康检查：
 
 ```bash
