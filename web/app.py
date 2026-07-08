@@ -13,6 +13,7 @@ from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile, Web
 from fastapi.responses import FileResponse, PlainTextResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
+from converter.backends.maixcam2_pulsar2 import docker_bind_mount
 from converter.yolo.node_profiles import get_yolo_profile
 
 
@@ -461,8 +462,8 @@ def repair_job_owner_with_docker(job_dir: Path, docker_image: str) -> None:
         "docker",
         "run",
         "--rm",
-        "-v",
-        f"{job_dir.resolve()}:/data",
+        "--mount",
+        docker_bind_mount(job_dir, "/data"),
         "--entrypoint",
         "/bin/chown",
         docker_image,

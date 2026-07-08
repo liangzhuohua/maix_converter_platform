@@ -89,6 +89,8 @@ docker ps
 
 如果 `docker ps` 没有权限错误，就说明 Docker 基本可用。
 
+Windows 下如果 Docker 转换阶段报错，优先查看任务目录里的 `convert.log`。如果日志显示路径挂载失败，建议把项目放到纯英文路径下，比如 `C:\maix_converter_platform`，避免中文目录、特殊符号或过深路径影响 Docker bind mount。
+
 ## 4. 安装 Pulsar2 Docker 镜像
 
 MaixCam2 模型转换使用的是 AX620E 工具链。按照 [Sipeed MaixCAM2 模型转换文档](https://wiki.sipeed.com/maixpy/doc/zh/ai_model_converter/maixcam2.html)，推荐把 Pulsar2 放在 Docker 里运行，这样可以避免宿主机 Python、系统库和工具链版本不匹配。

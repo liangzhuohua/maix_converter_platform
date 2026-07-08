@@ -72,8 +72,8 @@ def run_pulsar2_job(
         "run",
         "-i",
         "--rm",
-        "-v",
-        f"{job_dir.resolve()}:/data",
+        "--mount",
+        docker_bind_mount(job_dir, "/data"),
         docker_image,
     ]
     fast_arg = " --fast" if fast else ""
@@ -91,6 +91,13 @@ def host_chown_command() -> str:
     if not hasattr(os, "getuid") or not hasattr(os, "getgid"):
         return ""
     return f"chown -R {os.getuid()}:{os.getgid()} /data || true\n"
+
+
+def docker_bind_mount(host_path: Path, container_path: str) -> str:
+    source = str(host_path.resolve())
+    if "," in source:
+        raise ValueError(f"Docker bind mount source path cannot contain comma: {source}")
+    return f"type=bind,source={source},target={container_path}"
 
 
 def run_and_log(cmd: list[str], log_path: Path, stdin_text: str | None = None) -> None:
@@ -118,7 +125,8 @@ def run_and_log(cmd: list[str], log_path: Path, stdin_text: str | None = None) -
             log.flush()
         code = process.wait()
         if code != 0:
-            raise subprocess.CalledProcessError(code, cmd)
+            error = subprocess.CalledProcessError(code, cmd)
+            raise RuntimeError(f"command failed with exit code {code}, see log: {log_path}") from error
 
 
 def write_container_script(path: Path, profile: YoloProfile) -> None:
