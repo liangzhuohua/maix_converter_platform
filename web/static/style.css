@@ -387,7 +387,15 @@ h2 {
   margin-top: 16px;
 }
 
-.job-meta div {
+.job-config {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.job-meta div,
+.job-config div {
   min-width: 0;
   border: 1px solid var(--line);
   border-radius: 6px;
@@ -395,7 +403,8 @@ h2 {
   padding: 10px;
 }
 
-.job-meta strong {
+.job-meta strong,
+.job-config strong {
   display: block;
   overflow: hidden;
   margin-top: 5px;
@@ -404,6 +413,18 @@ h2 {
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.job-error {
+  margin-top: 12px;
+  border: 1px solid #f1b9b9;
+  border-radius: 6px;
+  background: var(--red-soft);
+  color: var(--red);
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.45;
+  white-space: pre-wrap;
 }
 
 .actions {
@@ -468,6 +489,7 @@ h2 {
 @media (max-width: 900px) {
   .workspace,
   .job-meta,
+  .job-config,
   .job-row {
     grid-template-columns: 1fr;
   }

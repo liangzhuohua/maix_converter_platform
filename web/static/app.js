@@ -10,6 +10,11 @@ const jobStatus = document.querySelector("#jobStatus");
 const jobId = document.querySelector("#jobId");
 const jobModel = document.querySelector("#jobModel");
 const jobDone = document.querySelector("#jobDone");
+const jobYolo = document.querySelector("#jobYolo");
+const jobSize = document.querySelector("#jobSize");
+const jobImages = document.querySelector("#jobImages");
+const jobMode = document.querySelector("#jobMode");
+const jobError = document.querySelector("#jobError");
 const logView = document.querySelector("#logView");
 const refreshButton = document.querySelector("#refreshButton");
 const downloadButton = document.querySelector("#downloadButton");
@@ -181,6 +186,11 @@ function renderJob(job) {
   jobId.textContent = job.job_id || activeJobId || "-";
   jobModel.textContent = [job.model_name, job.yolo_version].filter(Boolean).join(" / ") || "-";
   jobDone.textContent = job.completed_at || "-";
+  jobYolo.textContent = [job.yolo_version, job.task].filter(Boolean).join(" / ") || "-";
+  jobSize.textContent = formatImageSize(job.imgsz);
+  jobImages.textContent = Number.isFinite(Number(job.images_num)) ? `${job.images_num}` : "-";
+  jobMode.textContent = job.fast ? "快速" : "完整";
+  renderJobError(job);
 
   if (job.status === "success") {
     downloadButton.href = `/api/jobs/${job.job_id || activeJobId}/download`;
@@ -190,6 +200,17 @@ function renderJob(job) {
   } else {
     downloadButton.classList.remove("ready");
   }
+}
+
+function renderJobError(job) {
+  const message = job.status === "failed" ? job.error || "转换失败，请查看日志。" : "";
+  jobError.textContent = message;
+  jobError.hidden = !message;
+}
+
+function formatImageSize(size) {
+  if (!Array.isArray(size) || size.length < 2) return "-";
+  return `${size[0]} x ${size[1]}`;
 }
 
 function setStatus(status) {
@@ -322,6 +343,12 @@ async function deleteJob(id) {
     jobId.textContent = "-";
     jobModel.textContent = "-";
     jobDone.textContent = "-";
+    jobYolo.textContent = "-";
+    jobSize.textContent = "-";
+    jobImages.textContent = "-";
+    jobMode.textContent = "-";
+    jobError.hidden = true;
+    jobError.textContent = "";
     setStatus("idle");
     logView.textContent = "任务已删除";
     downloadButton.href = "#";

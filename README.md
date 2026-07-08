@@ -125,6 +125,12 @@ jobs/20260708_120000_yolo26n_maixcam2_yolo26/
 
 YOLO11 这里使用 MaixPy 文档里 MaixCam2 推荐的两个输出节点。不要使用 `/model.23/Concat_output_0`、`/model.23/Concat_1_output_0`、`/model.23/Concat_2_output_0` 这组三输出方案；它在 MaixCam2 上容易量化失败。
 
+后续计划：
+
+- YOLOv8 detect
+- YOLOv5 detect
+- MaixCam / MaixCam Pro 后端
+
 ## Web API
 
 Web 后端使用 FastAPI。因为 `.pt` 导出依赖 `ultralytics`，建议在你的 conda `yolo` 环境里安装和运行：
@@ -147,7 +153,7 @@ uvicorn web.app:app --host 0.0.0.0 --port 8000
 http://127.0.0.1:8000/
 ```
 
-页面支持模型上传、数据集上传、上传进度、实时日志、任务状态、结果 zip 下载和任务删除。
+页面支持模型上传、数据集上传、上传进度、实时日志、任务状态、任务配置回显、失败错误摘要、结果 zip 下载和任务删除。
 
 最近任务列表使用 SSE 单向推送，服务端在任务摘要变化时发送新列表：
 
