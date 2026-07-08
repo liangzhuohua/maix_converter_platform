@@ -34,10 +34,10 @@ inputs/
 使用 `.onnx` 输入：
 
 ```bash
-cd /home/ziyue/maixcam2_model/maix_converter_platform
+cd maix_converter_platform
 python convert_cli.py \
-  --model /home/ziyue/maixcam2_model/maixcam2_yolo26/yolo26n.onnx \
-  --dataset /home/ziyue/maixcam2_model/maixcam2_yolo26/coco \
+  --model inputs/models/yolo26n.onnx \
+  --dataset inputs/datasets/coco \
   --model-name yolo26n \
   --images-num 100
 ```
@@ -69,7 +69,7 @@ python convert_cli.py \
 使用 `.pt` 输入时，需要在安装了 `ultralytics` 的 Python 环境中执行，比如你的 conda `yolo` 环境：
 
 ```bash
-cd /home/ziyue/maixcam2_model/maix_converter_platform
+cd maix_converter_platform
 python convert_cli.py \
   --model inputs/models/yolo26n.pt \
   --dataset inputs/datasets/coco \
@@ -153,7 +153,7 @@ YOLO11 这里使用 MaixPy 文档里 MaixCam2 推荐的两个输出节点。不�
 Web 后端使用 FastAPI。因为 `.pt` 导出依赖 `ultralytics`，建议在你的 conda `yolo` 环境里安装和运行：
 
 ```bash
-cd /home/ziyue/maixcam2_model/maix_converter_platform
+cd maix_converter_platform
 conda activate yolo
 pip install -r requirements-web.txt
 ```
