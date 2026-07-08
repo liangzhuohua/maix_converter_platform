@@ -27,6 +27,11 @@ def main():
         action="store_true",
         help="ask Ultralytics to simplify ONNX when exporting .pt",
     )
+    parser.add_argument(
+        "--fast",
+        action="store_true",
+        help="skip Pulsar2 precision analysis and output checks for faster debug builds",
+    )
     parser.add_argument("--docker-image", default="pulsar2:6.0", help="Pulsar2 docker image")
     parser.add_argument("--jobs-dir", default="jobs", help="job output root directory")
     args = parser.parse_args()
@@ -68,6 +73,7 @@ def main():
         model_name=model_name,
         docker_image=args.docker_image,
         images_num=args.images_num,
+        fast=args.fast,
     )
     print("result:", job_dir / "out")
     print("log:", job_dir / "convert.log")

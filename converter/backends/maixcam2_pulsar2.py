@@ -62,6 +62,7 @@ def run_pulsar2_job(
     model_name: str,
     docker_image: str,
     images_num: int,
+    fast: bool = False,
 ) -> None:
     cmd = [
         "docker",
@@ -72,9 +73,10 @@ def run_pulsar2_job(
         f"{job_dir.resolve()}:/data",
         docker_image,
     ]
+    fast_arg = " --fast" if fast else ""
     stdin_text = (
         "cd /data\n"
-        f"python convert_inside_docker.py --model-name {model_name} --images-num {images_num}\n"
+        f"python convert_inside_docker.py --model-name {model_name} --images-num {images_num}{fast_arg}\n"
         "exit\n"
     )
     run_and_log(cmd, job_dir / "convert.log", stdin_text=stdin_text)
@@ -134,6 +136,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--model-name", required=True)
     parser.add_argument("--images-num", type=int, default=100)
+    parser.add_argument("--fast", action="store_true")
     args = parser.parse_args()
 
     model_path = Path(f"/data/{args.model_name}.onnx")
@@ -161,8 +164,8 @@ def main():
     simplify_or_copy(extracted, sim)
     pack_images(images_dir, args.images_num, tmp_images / "images.tar")
 
-    build_model("NPU1", "vnpu", sim, config_dir / "yolo26_vnpu.json", out_dir, args.model_name, args.images_num)
-    build_model("NPU2", "npu", sim, config_dir / "yolo26_npu.json", out_dir, args.model_name, args.images_num)
+    build_model("NPU1", "vnpu", sim, config_dir / "yolo26_vnpu.json", out_dir, args.model_name, args.images_num, args.fast)
+    build_model("NPU2", "npu", sim, config_dir / "yolo26_npu.json", out_dir, args.model_name, args.images_num, args.fast)
     print("done")
     subprocess.run(["ls", "-lh", str(out_dir)], check=False)
 
@@ -205,7 +208,7 @@ def pack_images(images_dir: Path, images_num: int, tar_path: Path):
     print("saved:", tar_path)
 
 
-def make_config(npu_mode: str, config_path: Path, images_num: int):
+def make_config(npu_mode: str, config_path: Path, images_num: int, fast: bool):
     config = {
         "model_type": "ONNX",
         "npu_mode": npu_mode,
@@ -221,7 +224,7 @@ def make_config(npu_mode: str, config_path: Path, images_num: int):
                 }
             ],
             "calibration_method": "MinMax",
-            "precision_analysis": True,
+            "precision_analysis": not fast,
         },
         "input_processors": [
             {
@@ -242,7 +245,7 @@ def make_config(npu_mode: str, config_path: Path, images_num: int):
             for name in OUTPUT_NODES
         ],
         "compiler": {
-            "check": 3,
+            "check": 0 if fast else 3,
             "check_mode": "CheckOutput",
             "check_cosine_simularity": 0.9,
         },
@@ -252,13 +255,13 @@ def make_config(npu_mode: str, config_path: Path, images_num: int):
     print("saved config:", config_path)
 
 
-def build_model(npu_mode: str, suffix: str, onnx_path: Path, config_path: Path, out_dir: Path, model_name: str, images_num: int):
+def build_model(npu_mode: str, suffix: str, onnx_path: Path, config_path: Path, out_dir: Path, model_name: str, images_num: int, fast: bool):
     print(f"Step 4: build {model_name}_{suffix}.axmodel")
     build_dir = Path("/data/tmp_build")
     if build_dir.exists():
         shutil.rmtree(build_dir)
     build_dir.mkdir(parents=True, exist_ok=True)
-    make_config(npu_mode, config_path, images_num)
+    make_config(npu_mode, config_path, images_num, fast)
     subprocess.run(
         [
             "pulsar2",

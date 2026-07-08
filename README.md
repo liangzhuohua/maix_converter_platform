@@ -48,6 +48,20 @@ python convert_cli.py \
 
 `--imgsz 640 480` 表示宽 640、高 480，导出的 ONNX 输入形状是 `[1, 3, 480, 640]`。
 
+调试转换流程时可以加 `--fast`，会关闭 Pulsar2 精度分析和输出校验，转换会更快：
+
+```bash
+python convert_cli.py \
+  --model inputs/models/yolo26n.pt \
+  --dataset inputs/datasets \
+  --model-name yolo26n \
+  --imgsz 640 480 \
+  --images-num 100 \
+  --fast
+```
+
+最终要放到 MaixCam2 上使用的模型，建议去掉 `--fast` 重新完整转换一次。
+
 输出目录会在 `jobs/` 下，每次转换一个独立任务目录。
 
 结果文件：
