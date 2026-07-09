@@ -12,7 +12,7 @@
         <h1>Maix Converter</h1>
       </div>
       <div class="topbar-meta">
-        <div class="support-chip">MaixCam2 · YOLO26 · YOLO11 · YOLOv8</div>
+        <div class="support-chip">MaixCam / MaixCam2 · YOLO26 · YOLO11 · YOLOv8</div>
         <div class="server-state" id="serverState">API 检查中</div>
       </div>
     </header>
@@ -21,7 +21,7 @@
       <section class="panel form-panel">
         <div class="panel-head">
           <h2>转换任务</h2>
-          <span class="chip">Pulsar2</span>
+          <span class="chip">Docker</span>
         </div>
 
         <form id="jobForm" class="job-form">
@@ -47,6 +47,26 @@
             <span>模型名称</span>
             <input id="modelName" name="model_name" type="text" placeholder="yolo26n" />
           </label>
+
+          <div class="field">
+            <span>目标设备</span>
+            <div class="segmented-control" role="radiogroup" aria-label="目标设备">
+              <label>
+                <input type="radio" name="target" value="maixcam2" checked />
+                <span>
+                  <strong>MaixCam2</strong>
+                  <em>Pulsar2 / AX620E</em>
+                </span>
+              </label>
+              <label>
+                <input type="radio" name="target" value="maixcam" />
+                <span>
+                  <strong>MaixCAM / Pro</strong>
+                  <em>TPU-MLIR / CV181x</em>
+                </span>
+              </label>
+            </div>
+          </div>
 
           <div class="field">
             <span>YOLO 版本</span>
@@ -136,6 +156,10 @@
           <div>
             <span>YOLO</span>
             <strong id="jobYolo">-</strong>
+          </div>
+          <div>
+            <span>目标设备</span>
+            <strong id="jobTarget">-</strong>
           </div>
           <div>
             <span>分辨率</span>

@@ -398,6 +398,62 @@ h2 {
   gap: 12px;
 }
 
+.segmented-control {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.segmented-control label {
+  display: block;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.segmented-control input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.segmented-control span {
+  min-height: 56px;
+  display: grid;
+  align-content: center;
+  gap: 3px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--text);
+  padding: 9px 11px;
+  transition:
+    border-color 120ms ease,
+    background 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.segmented-control strong {
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.segmented-control em {
+  color: var(--muted);
+  font-size: 11px;
+  font-style: normal;
+  line-height: 1.2;
+}
+
+.segmented-control input:checked + span {
+  border-color: #bdd4f4;
+  background: var(--blue-soft);
+  color: var(--blue);
+}
+
+.segmented-control input:focus-visible + span {
+  box-shadow: 0 0 0 3px rgba(23, 105, 224, 0.14);
+}
+
 .toggle-field {
   min-height: 42px;
   display: flex;
@@ -544,7 +600,7 @@ h2 {
 
 .job-config {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 10px;
   margin-top: 10px;
 }

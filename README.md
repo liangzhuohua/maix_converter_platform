@@ -1,20 +1,20 @@
 # Maix Converter Platform
 
-Maix Converter Platform 是一个面向 MaixCam2 的 YOLO 模型转换网页工具。它的目标是把原本需要手动敲很多命令、准备配置文件、进入 Docker、复制结果文件的转换流程，整理成一个更容易使用的 Web 页面。
+Maix Converter Platform 是一个面向 MaixCAM / MaixCAM Pro / MaixCam2 的 YOLO 模型转换网页工具。它的目标是把原本需要手动敲很多命令、准备配置文件、进入 Docker、复制结果文件的转换流程，整理成一个更容易使用的 Web 页面。
 
 你只需要上传 YOLO 模型和量化图片数据集，选择 YOLO 版本、输入分辨率和转换参数，平台就会自动完成：
 
 - `.pt` 导出 `.onnx`
 - ONNX 输出节点裁剪
 - 量化图片打包
-- Pulsar2 转换
+- Pulsar2 / TPU-MLIR 转换
 - 生成 `.mud`
-- 生成 MaixCam2 可用的 `.axmodel`
+- 生成 MaixCam2 可用的 `.axmodel`，或 MaixCAM / MaixCAM Pro 可用的 `.cvimodel`
 - 打包转换结果 zip
 
 ## 当前支持
 
-- 设备：MaixCam2
+- 设备：MaixCam2、MaixCAM / MaixCAM Pro
 - 任务：Detect
 - YOLO26
 - YOLO11
@@ -189,7 +189,41 @@ usage: main.py [-h] {version,build,run,llm_build} ...
 
 > 平台运行转换任务时会自动调用 Docker，不需要你手动进入容器。只有在排查环境问题时，才需要手动运行上面的验证命令。
 
-## 5. 启动网页端
+## 5. 安装 MaixCAM / MaixCAM Pro TPU-MLIR Docker 镜像
+
+如果你只转换 MaixCam2，可以跳过本节。
+
+MaixCAM / MaixCAM Pro 使用 TPU-MLIR 工具链，基础镜像是：
+
+```text
+sophgo/tpuc_dev:v3.4
+```
+
+这个基础镜像里通常没有直接可用的 `model_transform.py`，需要安装 `tpu_mlir`。为了避免每次转换都在临时容器里重新安装，本项目提供了一个派生镜像 Dockerfile。先确保已经有基础镜像：
+
+```bash
+docker images | grep sophgo/tpuc_dev
+```
+
+不要进入 `sophgo/tpuc_dev:v3.4` 容器后手动执行 `pip install tpu_mlir` 来作为长期方案。`docker run --rm` 启动的是临时容器，退出后容器会被删除，刚刚安装的 Python 包也会消失。正确做法是构建一次下面这个派生镜像，把 `tpu_mlir` 固化到镜像里。
+
+然后在项目根目录执行一次：
+
+```bash
+docker build -f docker/maixcam-tpumlir.Dockerfile -t maixcam-tpumlir:v3.4 .
+```
+
+验证：
+
+```bash
+docker run --rm maixcam-tpumlir:v3.4 model_transform.py --help
+```
+
+能看到 `model_transform.py` 的帮助信息，就代表 MaixCAM / MaixCAM Pro 转换环境可用。
+
+之后平台会默认使用 `maixcam-tpumlir:v3.4` 进行 MaixCAM / MaixCAM Pro 转换，不需要再手动进入 Docker 安装 `tpu_mlir`。
+
+## 6. 启动网页端
 
 进入项目目录并激活 Python 环境：
 
@@ -212,7 +246,7 @@ http://127.0.0.1:8000/
 
 如果你是在另一台电脑访问这台转换服务器，把 `127.0.0.1` 换成服务器 IP。
 
-## 6. 准备上传文件
+## 7. 准备上传文件
 
 模型文件支持：
 
@@ -248,7 +282,7 @@ dataset.zip
 
 建议选择和实际使用场景接近的图片。调试时可以先用 50 到 100 张，正式转换可以适当增加。
 
-## 7. 网页选项说明
+## 8. 网页选项说明
 
 ### 模型文件
 
@@ -317,7 +351,7 @@ yolo11n_vnpu.axmodel
 
 正式部署到 MaixCam2 前，建议关闭快速模式重新转换一次。
 
-## 8. 开始转换和下载结果
+## 9. 开始转换和下载结果
 
 填写完选项后，点击“开始转换”。
 
@@ -338,6 +372,15 @@ model_name_vnpu.axmodel
 ```
 
 把这几个文件放到 MaixCam2 的同一个目录中，然后在 MaixPy 代码里加载 `.mud`。
+
+如果目标设备选择的是 MaixCAM / MaixCAM Pro，zip 里会包含：
+
+```text
+model_name.mud
+model_name.cvimodel
+```
+
+把这两个文件放到 MaixCAM / MaixCAM Pro 的同一个目录中，然后在 MaixPy 代码里加载 `.mud`。
 
 下面以 YOLO11 为例：
 
@@ -361,7 +404,7 @@ while not app.need_exit():
 
 如果你转换的是其他 YOLO 版本，代码里的模型类需要换成 MaixPy 对应接口。
 
-## 9. 任务目录和自动清理
+## 10. 任务目录和自动清理
 
 每次转换都会生成一个任务目录：
 

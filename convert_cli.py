@@ -7,16 +7,17 @@ from datetime import datetime
 from pathlib import Path
 from shutil import copyfileobj
 
-from converter.backends.maixcam2_pulsar2 import new_job_dir, prepare_job, run_pulsar2_job
+from converter.backends import maixcam2_pulsar2, maixcam_tpumlir
 from converter.yolo.export import export_pt_to_onnx
 from converter.yolo.labels import resolve_labels
 from converter.yolo.node_profiles import get_yolo_profile
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Convert YOLO detect model to MaixCam2 axmodel.")
+    parser = argparse.ArgumentParser(description="Convert YOLO detect model to MaixCAM / MaixCAM2 model package.")
     parser.add_argument("--model", required=True, help="YOLO .pt or .onnx model path")
     parser.add_argument("--dataset", required=True, help="calibration image directory or .zip file")
+    parser.add_argument("--target", default="maixcam2", choices=["maixcam2", "maixcam"], help="target device")
     parser.add_argument("--model-name", default="", help="output model base name, default is model stem")
     parser.add_argument("--labels", default="", help="comma separated labels, default is read from model metadata")
     parser.add_argument("--yolo-version", default="yolo26", choices=["yolo11", "yolo26", "yolov8"], help="YOLO profile")
@@ -39,9 +40,9 @@ def main():
     parser.add_argument(
         "--fast",
         action="store_true",
-        help="skip Pulsar2 precision analysis and output checks for faster debug builds",
+        help="skip expensive output checks for faster debug builds",
     )
-    parser.add_argument("--docker-image", default="pulsar2:6.0", help="Pulsar2 docker image")
+    parser.add_argument("--docker-image", default="", help="conversion docker image, default depends on target")
     parser.add_argument("--jobs-dir", default="jobs", help="job output root directory")
     parser.add_argument("--job-dir", default="", help="exact job directory, mainly used by the web API")
     args = parser.parse_args()
@@ -51,6 +52,8 @@ def main():
     model_name = clean_model_name(args.model_name.strip() or model_path.stem)
     labels, labels_source = resolve_labels(model_path, args.labels)
     profile = get_yolo_profile(args.yolo_version, args.task)
+    target = args.target.lower()
+    docker_image = args.docker_image or default_docker_image(target)
 
     if args.images_num < 1:
         raise ValueError("--images-num must be >= 1")
@@ -61,7 +64,7 @@ def main():
         job_dir = Path(args.job_dir).expanduser().resolve()
     else:
         jobs_root = Path(args.jobs_dir).expanduser().resolve()
-        job_dir = new_job_dir(jobs_root, model_name, profile=profile)
+        job_dir = new_job_dir(jobs_root, model_name, profile=profile, target=target)
     job_dir.mkdir(parents=True, exist_ok=True)
     print("job:", job_dir)
 
@@ -69,6 +72,7 @@ def main():
         "status": "running",
         "created_at": now_iso(),
         "model_name": model_name,
+        "target": target,
         "yolo_version": profile.yolo_version,
         "task": profile.task,
         "input_model": str(model_path),
@@ -82,7 +86,7 @@ def main():
         "opset": args.opset,
         "simplify_onnx": args.simplify_onnx,
         "fast": args.fast,
-        "docker_image": args.docker_image,
+        "docker_image": docker_image,
         "output_dir": str(job_dir / "out"),
         "log": str(job_dir / "convert.log"),
     }
@@ -109,23 +113,48 @@ def main():
         elif suffix != ".onnx":
             raise ValueError(f"unsupported model suffix: {model_path.suffix}, expected .pt or .onnx")
 
-        prepare_job(
-            job_dir=job_dir,
-            model_path=model_path,
-            dataset_dir=dataset_dir,
-            model_name=model_name,
-            profile=profile,
-            labels=labels,
-            images_num=args.images_num,
-        )
-        run_pulsar2_job(
-            job_dir=job_dir,
-            model_name=model_name,
-            docker_image=args.docker_image,
-            images_num=args.images_num,
-            fast=args.fast,
-        )
-        zip_path = package_outputs(job_dir, model_name, profile=profile)
+        if target == "maixcam2":
+            maixcam2_pulsar2.prepare_job(
+                job_dir=job_dir,
+                model_path=model_path,
+                dataset_dir=dataset_dir,
+                model_name=model_name,
+                profile=profile,
+                labels=labels,
+                images_num=args.images_num,
+            )
+            maixcam2_pulsar2.run_pulsar2_job(
+                job_dir=job_dir,
+                model_name=model_name,
+                docker_image=docker_image,
+                images_num=args.images_num,
+                fast=args.fast,
+            )
+        elif target == "maixcam":
+            input_shape = read_onnx_input_hw(model_path, fallback=(height, width))
+            metadata["onnx_input_shape"] = [1, 3, input_shape[0], input_shape[1]]
+            write_job_json(job_dir, metadata)
+            maixcam_tpumlir.prepare_job(
+                job_dir=job_dir,
+                model_path=model_path,
+                dataset_dir=dataset_dir,
+                model_name=model_name,
+                profile=profile,
+                labels=labels,
+                images_num=args.images_num,
+                input_shape=input_shape,
+            )
+            maixcam_tpumlir.run_tpumlir_job(
+                job_dir=job_dir,
+                model_name=model_name,
+                docker_image=docker_image,
+                images_num=args.images_num,
+                fast=args.fast,
+            )
+        else:
+            raise ValueError(f"unsupported target: {target}")
+
+        zip_path = package_outputs(job_dir, model_name, profile=profile, target=target)
         metadata.update(
             {
                 "status": "success",
@@ -152,13 +181,13 @@ def main():
         raise
 
 
-def package_outputs(job_dir: Path, model_name: str, profile) -> Path:
+def package_outputs(job_dir: Path, model_name: str, profile, target: str) -> Path:
     out_dir = job_dir / "out"
     files = sorted(p for p in out_dir.iterdir() if p.is_file())
     if not files:
         raise FileNotFoundError(f"no output files found in {out_dir}")
 
-    zip_path = job_dir / f"{model_name}_maixcam2_{profile.yolo_version}.zip"
+    zip_path = job_dir / f"{model_name}_{target}_{profile.yolo_version}.zip"
     with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         for path in files:
             zf.write(path, arcname=path.name)
@@ -174,6 +203,48 @@ def prepare_dataset_path(dataset_path: Path, job_dir: Path) -> Path:
         extract_zip_safely(dataset_path, dst)
         return dst
     raise FileNotFoundError(f"dataset must be an image directory or .zip file: {dataset_path}")
+
+
+def default_docker_image(target: str) -> str:
+    if target == "maixcam2":
+        return "pulsar2:6.0"
+    if target == "maixcam":
+        return "maixcam-tpumlir:v3.4"
+    raise ValueError(f"unsupported target: {target}")
+
+
+def new_job_dir(root: Path, model_name: str, profile, target: str) -> Path:
+    if target == "maixcam2":
+        return maixcam2_pulsar2.new_job_dir(root, model_name, profile=profile)
+    if target == "maixcam":
+        return maixcam_tpumlir.new_job_dir(root, model_name, profile=profile)
+    raise ValueError(f"unsupported target: {target}")
+
+
+def read_onnx_input_hw(model_path: Path, fallback: tuple[int, int]) -> tuple[int, int]:
+    try:
+        import onnx
+    except ModuleNotFoundError:
+        print(
+            "onnx package not found on host, use --imgsz as MaixCAM input shape: "
+            f"[1, 3, {fallback[0]}, {fallback[1]}]"
+        )
+        return fallback
+
+    model = onnx.load(model_path)
+    if not model.graph.input:
+        raise ValueError(f"ONNX model has no inputs: {model_path}")
+    input_info = model.graph.input[0]
+    dims = []
+    for dim in input_info.type.tensor_type.shape.dim:
+        if not dim.HasField("dim_value"):
+            raise ValueError(f"ONNX input shape must be static for MaixCAM: {input_info.name}")
+        dims.append(dim.dim_value)
+    if len(dims) != 4:
+        raise ValueError(f"ONNX input must be NCHW rank 4 for MaixCAM, got: {dims}")
+    if dims[1] != 3:
+        raise ValueError(f"ONNX input must have 3 channels in NCHW layout, got: {dims}")
+    return dims[2], dims[3]
 
 
 def extract_zip_safely(zip_path: Path, dst_dir: Path) -> None:

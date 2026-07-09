@@ -11,6 +11,9 @@ const yoloSelectLabel = document.querySelector("#yoloSelectLabel");
 const yoloSelectMeta = document.querySelector("#yoloSelectMeta");
 const yoloSelectMenu = document.querySelector("#yoloSelectMenu");
 const yoloSelectOptions = Array.from(document.querySelectorAll(".select-option"));
+const targetInputs = Array.from(document.querySelectorAll('input[name="target"]'));
+const imgszWidth = document.querySelector('input[name="imgsz_width"]');
+const imgszHeight = document.querySelector('input[name="imgsz_height"]');
 const submitButton = document.querySelector("#submitButton");
 const serverState = document.querySelector("#serverState");
 const jobStatus = document.querySelector("#jobStatus");
@@ -18,6 +21,7 @@ const jobId = document.querySelector("#jobId");
 const jobModel = document.querySelector("#jobModel");
 const jobDone = document.querySelector("#jobDone");
 const jobYolo = document.querySelector("#jobYolo");
+const jobTarget = document.querySelector("#jobTarget");
 const jobSize = document.querySelector("#jobSize");
 const jobImages = document.querySelector("#jobImages");
 const jobMode = document.querySelector("#jobMode");
@@ -35,6 +39,11 @@ let activeJobId = "";
 let streamSocket = null;
 let jobsSource = null;
 let currentLog = "";
+
+const targetSizeDefaults = {
+  maixcam2: [640, 480],
+  maixcam: [320, 224],
+};
 
 modelFile.addEventListener("change", () => {
   updateFileName(modelFile, modelFileName, "支持 .pt / .onnx");
@@ -76,6 +85,12 @@ refreshButton.addEventListener("click", () => {
 });
 
 reloadJobs.addEventListener("click", refreshJobsList);
+
+targetInputs.forEach((input) => {
+  input.addEventListener("change", () => {
+    if (input.checked) applyTargetSizeDefault(input.value);
+  });
+});
 
 yoloSelectButton.addEventListener("click", () => {
   setYoloMenuOpen(yoloSelectMenu.hidden);
@@ -230,6 +245,7 @@ function renderJob(job) {
   jobModel.textContent = [job.model_name, job.yolo_version].filter(Boolean).join(" / ") || "-";
   jobDone.textContent = job.completed_at || "-";
   jobYolo.textContent = [job.yolo_version, job.task].filter(Boolean).join(" / ") || "-";
+  jobTarget.textContent = formatTarget(job.target);
   jobSize.textContent = formatImageSize(job.imgsz);
   jobImages.textContent = formatLabelsAndImages(job);
   jobMode.textContent = job.fast ? "快速" : "完整";
@@ -256,10 +272,25 @@ function formatImageSize(size) {
   return `${size[0]} x ${size[1]}`;
 }
 
+function applyTargetSizeDefault(target) {
+  const size = targetSizeDefaults[target];
+  if (!size) return;
+  imgszWidth.value = size[0];
+  imgszHeight.value = size[1];
+}
+
 function formatLabelsAndImages(job) {
   const labels = Number.isFinite(Number(job.labels_num)) ? `${job.labels_num}` : "-";
   const images = Number.isFinite(Number(job.images_num)) ? `${job.images_num}` : "-";
   return `${labels} / ${images}`;
+}
+
+function formatTarget(target) {
+  const names = {
+    maixcam2: "MaixCam2",
+    maixcam: "MaixCAM / Pro",
+  };
+  return names[target] || target || "-";
 }
 
 function setStatus(status) {
@@ -346,7 +377,7 @@ function renderJobsList(jobs) {
 
     const time = document.createElement("div");
     time.className = "muted";
-    time.textContent = [job.yolo_version, job.completed_at || job.created_at || "-"].filter(Boolean).join(" / ");
+    time.textContent = [formatTarget(job.target), job.yolo_version, job.completed_at || job.created_at || "-"].filter(Boolean).join(" / ");
 
     const button = document.createElement("button");
     button.className = "secondary-button";
@@ -436,6 +467,7 @@ async function deleteJob(id) {
     jobModel.textContent = "-";
     jobDone.textContent = "-";
     jobYolo.textContent = "-";
+    jobTarget.textContent = "-";
     jobSize.textContent = "-";
     jobImages.textContent = "-";
     jobMode.textContent = "-";

@@ -33,6 +33,7 @@ JOBS_DIR = BASE_DIR / "jobs"
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 MODEL_SUFFIXES = {".pt", ".onnx"}
 DATASET_SUFFIXES = {".zip"}
+TARGETS = {"maixcam2", "maixcam"}
 JOB_ID_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,180}")
 FINISHED_STATUSES = {"success", "failed"}
 ACTIVE_STATUSES = {"queued", "running"}
@@ -82,6 +83,7 @@ def create_job(
     images_num: int = Form(100),
     imgsz_width: int = Form(640),
     imgsz_height: int = Form(480),
+    target: str = Form("maixcam2"),
     yolo_version: str = Form("yolo26"),
     fast: bool = Form(False),
 ):
@@ -95,6 +97,9 @@ def create_job(
         raise HTTPException(status_code=400, detail="model must be .pt or .onnx")
     if dataset_suffix not in DATASET_SUFFIXES:
         raise HTTPException(status_code=400, detail="dataset upload must be .zip")
+    target = target.lower()
+    if target not in TARGETS:
+        raise HTTPException(status_code=400, detail=f"unsupported target: {target}")
 
     clean_model_name = slugify(model_name) or slugify(Path(model.filename or "model").stem)
     if not clean_model_name:
@@ -104,7 +109,8 @@ def create_job(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    job_id = new_job_id(clean_model_name, yolo_version=profile.yolo_version)
+    docker_image = default_docker_image(target)
+    job_id = new_job_id(clean_model_name, target=target, yolo_version=profile.yolo_version)
     job_dir = JOBS_DIR / job_id
     upload_dir = job_dir / "uploads"
     upload_dir.mkdir(parents=True, exist_ok=False)
@@ -125,6 +131,7 @@ def create_job(
             "created_at": now_iso(),
             "job_id": job_id,
             "model_name": clean_model_name,
+            "target": target,
             "yolo_version": profile.yolo_version,
             "task": profile.task,
             "input_model": str(model_path),
@@ -133,6 +140,7 @@ def create_job(
             "imgsz": [imgsz_width, imgsz_height],
             "output_nodes": profile.output_names,
             "fast": fast,
+            "docker_image": docker_image,
             "api_log": str(job_dir / "api.log"),
         },
     )
@@ -144,6 +152,7 @@ def create_job(
             "model_path": model_path,
             "dataset_path": dataset_path,
             "model_name": clean_model_name,
+            "target": target,
             "yolo_version": profile.yolo_version,
             "images_num": images_num,
             "imgsz_width": imgsz_width,
@@ -303,6 +312,7 @@ def run_conversion(
     model_path: Path,
     dataset_path: Path,
     model_name: str,
+    target: str,
     yolo_version: str,
     images_num: int,
     imgsz_width: int,
@@ -318,6 +328,8 @@ def run_conversion(
         str(dataset_path),
         "--model-name",
         model_name,
+        "--target",
+        target,
         "--yolo-version",
         yolo_version,
         "--imgsz",
@@ -512,6 +524,7 @@ def read_job_summary(job_dir: Path) -> dict:
         "job_id": job["job_id"],
         "status": job.get("status", "unknown"),
         "model_name": job.get("model_name", ""),
+        "target": job.get("target", ""),
         "yolo_version": job.get("yolo_version", ""),
         "labels_num": job.get("labels_num", ""),
         "created_at": job.get("created_at", ""),
@@ -578,9 +591,17 @@ def write_json(path: Path, data: dict) -> None:
     os.replace(tmp, path)
 
 
-def new_job_id(model_name: str, yolo_version: str) -> str:
+def new_job_id(model_name: str, target: str, yolo_version: str) -> str:
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-    return f"{stamp}_{model_name}_maixcam2_{yolo_version}"
+    return f"{stamp}_{model_name}_{target}_{yolo_version}"
+
+
+def default_docker_image(target: str) -> str:
+    if target == "maixcam2":
+        return "pulsar2:6.0"
+    if target == "maixcam":
+        return "maixcam-tpumlir:v3.4"
+    return "pulsar2:6.0"
 
 
 def now_iso() -> str:
