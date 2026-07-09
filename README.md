@@ -193,33 +193,144 @@ usage: main.py [-h] {version,build,run,llm_build} ...
 
 如果你只转换 MaixCam2，可以跳过本节。
 
-MaixCAM / MaixCAM Pro 使用 TPU-MLIR 工具链，基础镜像是：
+MaixCAM / MaixCAM Pro 使用算能 TPU-MLIR 工具链，底层需要 `model_transform.py`、`run_calibration.py`、`model_deploy.py` 这些命令。官方推荐在 Docker 里使用 TPU-MLIR，避免宿主机 Python、系统库和工具链版本不匹配。
+
+本项目分两层镜像：
 
 ```text
-sophgo/tpuc_dev:v3.4
+sophgo/tpuc_dev:v3.4       # 算能基础开发镜像
+maixcam-tpumlir:v3.4       # 本项目使用的镜像，基于上面镜像预装 tpu_mlir
 ```
 
-这个基础镜像里通常没有直接可用的 `model_transform.py`，需要安装 `tpu_mlir`。为了避免每次转换都在临时容器里重新安装，本项目提供了一个派生镜像 Dockerfile。先确保已经有基础镜像：
+平台运行 MaixCAM / MaixCAM Pro 转换时，默认调用的是：
+
+```text
+maixcam-tpumlir:v3.4
+```
+
+所以你需要先准备 `sophgo/tpuc_dev` 基础镜像，再构建一次 `maixcam-tpumlir:v3.4`。
+
+### 5.1 获取 sophgo/tpuc_dev 基础镜像
+
+先尝试直接拉取：
+
+```bash
+docker pull sophgo/tpuc_dev:latest
+```
+
+如果能成功，查看镜像：
 
 ```bash
 docker images | grep sophgo/tpuc_dev
 ```
 
-不要进入 `sophgo/tpuc_dev:v3.4` 容器后手动执行 `pip install tpu_mlir` 来作为长期方案。`docker run --rm` 启动的是临时容器，退出后容器会被删除，刚刚安装的 Python 包也会消失。正确做法是构建一次下面这个派生镜像，把 `tpu_mlir` 固化到镜像里。
+正常会看到类似：
 
-然后在项目根目录执行一次：
+```text
+sophgo/tpuc_dev   latest   ...
+```
+
+如果 `docker pull` 下载失败，可以参考 [MaixPy MaixCAM 模型转换文档](https://wiki.sipeed.com/maixpy/doc/zh/ai_model_converter/maixcam.html) 和 [TPU-MLIR 官方 README](https://github.com/sophgo/tpu-mlir/blob/master/README_cn.md) 的方式，下载镜像包后导入。
+
+TPU-MLIR 官方 README 当前给出的 v3.4 镜像包示例：
+
+```bash
+wget https://sophon-assets.sophon.cn/sophon-prod-s3/drive/25/04/15/16/tpuc_dev_v3.4.tar.gz
+docker load -i tpuc_dev_v3.4.tar.gz
+```
+
+MaixPy 文档里也给过类似写法，只是示例链接可能是旧版本：
+
+```bash
+wget https://sophon-file.sophon.cn/sophon-prod-s3/drive/24/06/14/12/sophgo-tpuc_dev-v3.2_191a433358ad.tar.gz
+docker load -i sophgo-tpuc_dev-v3.2_191a433358ad.tar.gz
+```
+
+本项目建议优先使用 v3.4。导入完成后再次检查：
+
+```bash
+docker images | grep sophgo/tpuc_dev
+```
+
+如果看到 `sophgo/tpuc_dev`，就说明基础镜像已经有了。镜像 tag 可能是 `latest`，也可能是 `v3.4`，下一步构建时按实际情况选择命令。
+
+镜像包导入成功后，下载的 `.tar.gz` 文件可以删除，Docker 已经把镜像保存到本地镜像库里。
+
+### 5.2 构建本项目使用的 maixcam-tpumlir 镜像
+
+不要进入 `sophgo/tpuc_dev` 容器后手动执行 `pip install tpu_mlir` 来作为长期方案。`docker run --rm` 启动的是临时容器，退出后容器会被删除，刚刚安装的 Python 包也会消失。
+
+正确做法是构建一次本项目提供的派生镜像，把 `tpu_mlir` 固化到镜像里。
+
+如果你的基础镜像是 `sophgo/tpuc_dev:v3.4`，在项目根目录执行：
 
 ```bash
 docker build -f docker/maixcam-tpumlir.Dockerfile -t maixcam-tpumlir:v3.4 .
 ```
 
-验证：
+如果你的基础镜像只有 `sophgo/tpuc_dev:latest`，执行：
+
+```bash
+docker build \
+  --build-arg TPUC_DEV_IMAGE=sophgo/tpuc_dev:latest \
+  -f docker/maixcam-tpumlir.Dockerfile \
+  -t maixcam-tpumlir:v3.4 \
+  .
+```
+
+构建完成后检查：
+
+```bash
+docker images | grep maixcam-tpumlir
+```
+
+正常会看到类似：
+
+```text
+maixcam-tpumlir   v3.4   ...
+```
+
+### 5.3 验证 TPU-MLIR 命令是否可用
+
+执行：
 
 ```bash
 docker run --rm maixcam-tpumlir:v3.4 model_transform.py --help
 ```
 
-能看到 `model_transform.py` 的帮助信息，就代表 MaixCAM / MaixCAM Pro 转换环境可用。
+正常会看到 `model_transform.py` 的帮助信息，开头类似：
+
+```text
+usage: model_transform.py ...
+```
+
+再检查部署命令：
+
+```bash
+docker run --rm maixcam-tpumlir:v3.4 model_deploy.py --help
+```
+
+如果也能看到帮助信息，就代表 MaixCAM / MaixCAM Pro 转换环境可用。
+
+### 5.4 常见问题
+
+如果构建时报：
+
+```text
+pull access denied for sophgo/tpuc_dev
+```
+
+说明本地没有 `sophgo/tpuc_dev:v3.4`，而 Docker 也没能从网络拉到这个 tag。先用 `docker images | grep sophgo/tpuc_dev` 看你本地实际的 tag。如果只有 `latest`，使用上面带 `--build-arg TPUC_DEV_IMAGE=sophgo/tpuc_dev:latest` 的构建命令。
+
+如果验证时报：
+
+```text
+model_transform.py: command not found
+```
+
+说明你运行的不是 `maixcam-tpumlir:v3.4`，或者派生镜像没有构建成功。重新执行 `docker build ... -t maixcam-tpumlir:v3.4 .` 后再验证。
+
+如果下载镜像包很慢，建议先手动用浏览器或 `wget` 下载到本机，再执行 `docker load -i <镜像包文件名>`。`docker load` 成功后，原始 `.tar.gz` 镜像包可以删除。
 
 之后平台会默认使用 `maixcam-tpumlir:v3.4` 进行 MaixCAM / MaixCAM Pro 转换，不需要再手动进入 Docker 安装 `tpu_mlir`。
 
