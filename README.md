@@ -25,14 +25,14 @@ Maix Converter Platform 是一个面向 MaixCAM / MaixCAM Pro / MaixCam2 的 YOL
 ## 1. 克隆项目
 
 ```bash
-git clone git@github.com:liangzhuohua/maix_converter_platform.git
+git clone git@github.com:sipeed/maix_converter_platform.git
 cd maix_converter_platform
 ```
 
 如果你使用 HTTPS：
 
 ```bash
-git clone https://github.com/liangzhuohua/maix_converter_platform.git
+git clone https://github.com/sipeed/maix_converter_platform.git
 cd maix_converter_platform
 ```
 

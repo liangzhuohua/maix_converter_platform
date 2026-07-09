@@ -2,12 +2,12 @@ import json
 import os
 import shlex
 import shutil
-import subprocess
 import tarfile
 import textwrap
 import time
 from pathlib import Path
 
+from converter.backends.process_log import run_and_log
 from converter.yolo.mud import write_maixcam2_yolo_mud
 from converter.yolo.node_profiles import YoloProfile
 
@@ -98,34 +98,6 @@ def docker_bind_mount(host_path: Path, container_path: str) -> str:
     if "," in source or "," in container_path:
         raise ValueError(f"Docker bind mount path cannot contain comma: {source} -> {container_path}")
     return f"type=bind,source={source},target={container_path}"
-
-
-def run_and_log(cmd: list[str], log_path: Path, stdin_text: str | None = None) -> None:
-    log_path.parent.mkdir(parents=True, exist_ok=True)
-    with log_path.open("w", encoding="utf-8") as log:
-        log.write("+ " + " ".join(cmd) + "\n")
-        if stdin_text:
-            log.write(stdin_text)
-        log.flush()
-        process = subprocess.Popen(
-            cmd,
-            stdin=subprocess.PIPE if stdin_text else None,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-        )
-        if stdin_text and process.stdin is not None:
-            process.stdin.write(stdin_text.encode("utf-8"))
-            process.stdin.close()
-        assert process.stdout is not None
-        for raw_line in process.stdout:
-            line = raw_line.decode("utf-8", errors="replace")
-            print(line, end="")
-            log.write(line)
-            log.flush()
-        code = process.wait()
-        if code != 0:
-            error = subprocess.CalledProcessError(code, cmd)
-            raise RuntimeError(f"command failed with exit code {code}, see log: {log_path}") from error
 
 
 def write_container_script(path: Path, profile: YoloProfile) -> None:

@@ -54,6 +54,7 @@ def main():
     profile = get_yolo_profile(args.yolo_version, args.task)
     target = args.target.lower()
     docker_image = args.docker_image or default_docker_image(target)
+    warn_yolo_version_mismatch(model_name, profile.yolo_version)
 
     if args.images_num < 1:
         raise ValueError("--images-num must be >= 1")
@@ -211,6 +212,24 @@ def default_docker_image(target: str) -> str:
     if target == "maixcam":
         return "maixcam-tpumlir:v3.4"
     raise ValueError(f"unsupported target: {target}")
+
+
+def warn_yolo_version_mismatch(model_name: str, yolo_version: str) -> None:
+    lowered = model_name.lower()
+    hints = {
+        "yolo11": "yolo11",
+        "yolov8": "yolov8",
+        "yolo8": "yolov8",
+        "yolo26": "yolo26",
+    }
+    for token, expected in hints.items():
+        if token in lowered and expected != yolo_version:
+            print(
+                "WARNING: model name looks like "
+                f"{expected}, but --yolo-version is {yolo_version}. "
+                "Please choose the YOLO version that matches the model."
+            )
+            return
 
 
 def new_job_dir(root: Path, model_name: str, profile, target: str) -> Path:

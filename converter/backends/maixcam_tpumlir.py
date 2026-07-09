@@ -1,12 +1,12 @@
 import os
 import shlex
 import shutil
-import subprocess
 import textwrap
 import time
 from pathlib import Path
 
 from converter.backends.maixcam2_pulsar2 import docker_bind_mount
+from converter.backends.process_log import run_and_log
 from converter.yolo.mud import write_maixcam_yolo_mud
 from converter.yolo.node_profiles import YoloProfile
 
@@ -92,34 +92,6 @@ def host_chown_command() -> str:
     if not hasattr(os, "getuid") or not hasattr(os, "getgid"):
         return ""
     return f"chown -R {os.getuid()}:{os.getgid()} /workspace || true\n"
-
-
-def run_and_log(cmd: list[str], log_path: Path, stdin_text: str | None = None) -> None:
-    log_path.parent.mkdir(parents=True, exist_ok=True)
-    with log_path.open("w", encoding="utf-8") as log:
-        log.write("+ " + " ".join(cmd) + "\n")
-        if stdin_text:
-            log.write(stdin_text)
-        log.flush()
-        process = subprocess.Popen(
-            cmd,
-            stdin=subprocess.PIPE if stdin_text else None,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-        )
-        if stdin_text and process.stdin is not None:
-            process.stdin.write(stdin_text.encode("utf-8"))
-            process.stdin.close()
-        assert process.stdout is not None
-        for raw_line in process.stdout:
-            line = raw_line.decode("utf-8", errors="replace")
-            print(line, end="")
-            log.write(line)
-            log.flush()
-        code = process.wait()
-        if code != 0:
-            error = subprocess.CalledProcessError(code, cmd)
-            raise RuntimeError(f"command failed with exit code {code}, see log: {log_path}") from error
 
 
 def write_container_script(path: Path, profile: YoloProfile, input_shape: tuple[int, int]) -> None:

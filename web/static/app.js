@@ -47,9 +47,10 @@ const targetSizeDefaults = {
 
 modelFile.addEventListener("change", () => {
   updateFileName(modelFile, modelFileName, "支持 .pt / .onnx");
-  if (modelName.value.trim() || !modelFile.files.length) return;
-  const name = modelFile.files[0].name.replace(/\.[^.]+$/, "");
-  modelName.value = name.replace(/[^A-Za-z0-9_.-]+/g, "_");
+  if (!modelFile.files.length) return;
+  const fileName = modelFile.files[0].name;
+  applyYoloVersionFromFileName(fileName);
+  modelName.value = modelNameFromFileName(fileName);
 });
 
 datasetFile.addEventListener("change", () => {
@@ -277,6 +278,22 @@ function applyTargetSizeDefault(target) {
   if (!size) return;
   imgszWidth.value = size[0];
   imgszHeight.value = size[1];
+}
+
+function applyYoloVersionFromFileName(fileName) {
+  const lower = fileName.toLowerCase();
+  if (lower.includes("yolo11")) {
+    setYoloVersion("yolo11", "YOLO11", "Detect");
+  } else if (lower.includes("yolov8") || lower.includes("yolo8")) {
+    setYoloVersion("yolov8", "YOLOv8", "Detect");
+  } else if (lower.includes("yolo26")) {
+    setYoloVersion("yolo26", "YOLO26", "Detect");
+  }
+}
+
+function modelNameFromFileName(fileName) {
+  const name = fileName.replace(/\.[^.]+$/, "");
+  return name.replace(/[^A-Za-z0-9_.-]+/g, "_");
 }
 
 function formatLabelsAndImages(job) {
